@@ -2,7 +2,7 @@
  * Task 3.7 — Action Logger
  * Every automated step must be logged here with full context.
  */
-const { pool } = require('../db');
+const { pool } = require('./db');
 
 /**
  * Append an immutable entry to the action_log table.
