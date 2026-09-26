@@ -11,7 +11,9 @@ const DISTRESS_KEYWORDS = [
 
 const YES_WORDS = ['हां', 'हाँ', 'भेज दो', 'ठीक है', 'भेजो', 'कर दो', 'हाँ जी', 'हां जी'];
 const NO_WORDS = ['नहीं', 'अभी मत', 'ना', 'रहने दो'];
-const GAS_LOW_WORDS = ['खत्म हो रहा है', 'कम है', 'खत्म'];
+// 'काम है' is an observed STT mis-transcription of 'कम है' (short vs long vowel).
+// Only matched after the gas question, so false-positive risk is low.
+const GAS_LOW_WORDS = ['खत्म हो रहा है', 'कम है', 'काम है', 'खत्म'];
 const GAS_FINE_WORDS = ['ठीक है', 'अभी ठीक है'];
 
 // DTMF fallback maps (task 1.5) — digit pressed -> same result labels

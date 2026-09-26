@@ -17,23 +17,39 @@ const { escalate } = require('./escalate');
 const { placeCall } = require('./place_call');
 
 
-async function reportOutcome(taskId, callStatus, transcript, parentResponse) {
-  if (!taskId) return;
+const BACKEND_OUTCOME_URL = process.env.BACKEND_OUTCOME_URL || 'http://localhost:4000/api/calls/outcome';
+
+// Task 2.4i — reports ONE outcome per call, after it ends.
+// callId is null on purpose: action_log.call_id is a UUID FK to calls(id),
+// so a Twilio SID there makes every audit-log insert fail silently.
+async function reportOutcome(callSid, session, callStatus) {
+  if (!session || !session.taskId) {
+    console.log('[BACKEND-SYNC] No taskId (manual CLI call) — not reporting.');
+    return;
+  }
+  if (session.reported) return;
+  session.reported = true;
+
+  const payload = {
+    taskId: session.taskId,
+    callId: null,
+    callSid,
+    callStatus, // 'answered' | 'no_answer' | 'distress'
+    parentResponse: `medicine:${session.medicine},gas:${session.gas}`,
+    responses: { medicine: session.medicine, gas: session.gas },
+    transcript: session.transcript.join(' | '),
+  };
+  console.log('[BACKEND-SYNC] Reporting:', JSON.stringify(payload));
+
   try {
-    const res = await fetch("http://localhost:4000/api/calls/outcome", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        taskId,
-        callId: "twilio-" + Date.now(),
-        callStatus,
-        transcript,
-        parentResponse,
-      })
+    const res = await fetch(BACKEND_OUTCOME_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
-    console.log("[BACKEND-SYNC] Outcome reported, status:", res.status);
+    console.log(`[BACKEND-SYNC] ${res.status}: ${await res.text()}`);
   } catch (err) {
-    console.error("[BACKEND-SYNC] Failed to report outcome:", err.message);
+    console.error('[BACKEND-SYNC] Failed to report outcome:', err.message);
   }
 }
 
@@ -47,6 +63,18 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
 const CHILD_NAME = process.env.CHILD_NAME || 'aapke bete';
 const RETRY_DELAY_MS = 15000;
 
+// Per-call state, keyed by Twilio CallSid (sent on every webhook, including
+// /call-status). Carries taskId + both answers across the whole call without
+// threading taskId through every Gather action URL.
+// In-memory only: lost if server.js restarts mid-call (same limitation as retry count).
+const sessions = new Map();
+
+function getSession(callSid) {
+  if (!sessions.has(callSid)) {
+    sessions.set(callSid, { taskId: null, medicine: null, gas: null, transcript: [], reported: false });
+  }
+  return sessions.get(callSid);
+}
 function requirePublicUrl() {
   if (!PUBLIC_BASE_URL) {
     throw new Error('PUBLIC_BASE_URL is not set in .env. Run ngrok and set it to the https URL it gives you.');
@@ -68,6 +96,9 @@ function playStatic(twiml, filename, fallbackText) {
 
 app.post('/voice', (req, res) => {
   requirePublicUrl();
+  const session = getSession(req.body.CallSid);
+  if (req.query.taskId) session.taskId = req.query.taskId;
+  console.log(`[SESSION] ${req.body.CallSid} — taskId: ${session.taskId || '(none, manual CLI call)'}`);
   const twiml = new twilio.twiml.VoiceResponse();
 
   playStatic(twiml, 'greeting.wav', `Namaste! Main ${CHILD_NAME} ki taraf se baat kar raha hoon.`);
@@ -83,7 +114,8 @@ app.post('/voice', (req, res) => {
   playStatic(gather, 'medicine_question.wav', 'Kya main dawai ka order bhej doon?');
 
   twiml.say({ language: 'hi-IN' }, 'Mujhe kuch nahi mila. Phir se koshish karte hain.');
-  twiml.redirect('/voice');
+  // Silence → reuse the unclear/DTMF path instead of replaying the greeting forever.
+  twiml.redirect('/handle-medicine?attempt=1');
 
   res.type('text/xml').send(twiml.toString());
 });
@@ -96,7 +128,10 @@ app.post('/handle-medicine', async (req, res) => {
   const result = matchMedicineResponse(speechText, digit);
 
   console.log(`MEDICINE_CHECK (attempt ${attempt}) — heard: "${speechText}" | digit: "${digit}" | matched: ${result}`);
-
+  const session = getSession(req.body.CallSid);
+  session.medicine = result;
+  if (speechText) session.transcript.push(`MEDICINE: ${speechText}`);
+  if (digit) session.transcript.push(`MEDICINE_DTMF: ${digit}`);
   const twiml = new twilio.twiml.VoiceResponse();
 
   if (result === 'distress') {
@@ -116,7 +151,8 @@ app.post('/handle-medicine', async (req, res) => {
       method: 'POST',
     });
     playStatic(gather, 'medicine_retry.wav', 'Haan ke liye ek dabayein, na ke liye do dabayein.');
-    twiml.redirect('/handle-gas?attempt=1');
+    // Silence on the keypad retry → finalize medicine as unclear, which then ASKS the gas question.
+    twiml.redirect('/handle-medicine?attempt=2');
     return res.type('text/xml').send(twiml.toString());
   }
 
@@ -150,7 +186,10 @@ app.post('/handle-gas', async (req, res) => {
   const result = matchGasResponse(speechText, digit);
 
   console.log(`GAS_BOOKING_CHECK (attempt ${attempt}) — heard: "${speechText}" | digit: "${digit}" | matched: ${result}`);
-
+  const session = getSession(req.body.CallSid);
+  session.gas = result;
+  if (speechText) session.transcript.push(`GAS: ${speechText}`);
+  if (digit) session.transcript.push(`GAS_DTMF: ${digit}`);
   const twiml = new twilio.twiml.VoiceResponse();
 
   if (result === 'distress') {
@@ -193,16 +232,33 @@ app.post('/call-status', async (req, res) => {
   const status = req.body.CallStatus;
 
   console.log(`Call status callback — attempt ${attempt}: ${status}`);
+  console.log('[SESSION END]', req.body.CallSid, JSON.stringify(sessions.get(req.body.CallSid) || null));
+  const callSid = req.body.CallSid;
+  const taskId = req.query.taskId || null;
+  // 'completed' but /voice never ran = parent hung up during the trial
+  // disclaimer / before the agent spoke. Treat as unanswered.
+  const neverReachedAgent = status === 'completed' && !sessions.has(callSid);
 
-  if (['no-answer', 'busy', 'failed'].includes(status)) {
-    if (attempt < 2) {
+  if (status === 'completed') {
+    const session = sessions.get(callSid);
+    if (session) {
+      const distress = session.medicine === 'distress' || session.gas === 'distress';
+      await reportOutcome(callSid, session, distress ? 'distress' : 'answered');
+    }
+  }
+
+  if (neverReachedAgent || ['no-answer', 'busy', 'failed'].includes(status)) {    if (attempt < 2) {
       console.log(`No answer on attempt ${attempt}. Retrying in ${RETRY_DELAY_MS / 1000}s...`);
       setTimeout(() => {
-        placeCall(attempt + 1).catch((err) => console.error('Retry call failed:', err.message));
+        // Keep the same number and task on retry — previously both were dropped.
+        placeCall(attempt + 1, req.body.To, taskId).catch((err) => console.error('Retry call failed:', err.message));
       }, RETRY_DELAY_MS);
     } else {
       console.log('Second attempt also unanswered — escalating missed-call alert.');
       await escalate({ type: 'missed_call', detail: `No answer after ${attempt} attempts`, lastStatus: status });
+      const session = getSession(callSid);
+      session.taskId = taskId;
+      await reportOutcome(callSid, session, 'no_answer');
     }
   }
 
