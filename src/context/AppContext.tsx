@@ -2,6 +2,13 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { playSound } from '../utils/audio';
 import { apiService, onBackendStatusChange, getBackendStatus } from '../services/api';
+import { processPrescriptionScan, convertToDocumentRecord } from '../services/geminiVision';
+import { 
+  parseUploadedDocument, 
+  createImmutableEventLog, 
+  evaluateFinancialGuardrail,
+  normalizeFrequency 
+} from '../utils/clinicalNormalizer';
 import type {
   KanbanTask,
   ParentProfile,
@@ -43,7 +50,7 @@ interface AppContextType {
   setDocuments: React.Dispatch<React.SetStateAction<DocumentRecord[]>>;
   activeDocument: DocumentRecord;
   setActiveDocument: (doc: DocumentRecord) => void;
-  uploadDocument: (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE' }) => void;
+  uploadDocument: (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE'; previewImageUrl?: string }) => Promise<DocumentRecord>;
   tasks: KanbanTask[];
   setTasks: React.Dispatch<React.SetStateAction<KanbanTask[]>>;
   prescriptionItems: PrescriptionItem[];
@@ -210,20 +217,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Helper to sync prescriptionItems with a DocumentRecord
   const syncPrescriptionItemsFromDoc = (doc: DocumentRecord) => {
-    const items: PrescriptionItem[] = doc.extractedItems.map((item) => ({
-      id: item.id,
-      medicineName: item.name,
-      dosage: item.dosage || '5 mg',
-      frequency: item.frequency,
-      frequencyCode: item.frequencyCode || 'OD',
-      instruction: item.instruction || 'Take as directed',
-      nextTriggerTime: item.triggerSlot,
-      confidence: item.confidenceScore,
-      sourceBox: item.sourceBox || { top: 36, left: 12, width: 76, height: 7 },
-      status: item.status || 'verified',
-      category: item.category,
-      rawOcrText: item.rawOcrText || `${item.name} ${item.dosage || ''} ${item.frequencyCode || ''}`
-    }));
+    const items: PrescriptionItem[] = doc.extractedItems.map((item) => {
+      const normalized = normalizeFrequency(item.frequency || item.frequencyCode || '');
+      return {
+        id: item.id,
+        medicineName: item.name,
+        dosage: item.dosage || '5 mg',
+        frequency: normalized.frequency,
+        frequencyCode: normalized.frequencyCode,
+        instruction: item.instruction || normalized.instruction,
+        nextTriggerTime: item.triggerSlot || normalized.triggerSlot,
+        confidence: item.confidenceScore,
+        sourceBox: item.sourceBox || { top: 36, left: 12, width: 76, height: 7 },
+        status: item.status || 'verified',
+        category: item.category,
+        rawOcrText: item.rawOcrText || `${item.name} ${item.dosage || ''} ${normalized.frequencyCode}`
+      };
+    });
     setPrescriptionItems(items);
     if (items.length > 0) {
       setSelectedRxId(items[0].id);
@@ -275,133 +285,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       message: `Updated profile context, documents, and local vendor bindings for ${parent.city}.`
     });
   };
-
-  // Dynamic upload document handler (Phase 2 Task 2.1i Integration)
-  const uploadDocument = async (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE' }) => {
+  // Dynamic upload document handler powered by multimodal Vision OCR (with smart offline fallback)
+  const uploadDocument = async (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE'; previewImageUrl?: string }): Promise<DocumentRecord> => {
     setIsOcrProcessing(true);
-    const fileName = file.name;
-    const isBill = fileName.toLowerCase().includes('bill') || fileName.toLowerCase().includes('sbpdcl');
-    
-    // Call Track B Multimodal Vision OCR extraction
-    let ocrResult: any = null;
-    try {
-      if (file instanceof File) {
-        ocrResult = await apiService.extractDocument(file, activeParent.name);
-      } else {
-        ocrResult = await apiService.extractDocument({ fileName, patientName: activeParent.name });
-      }
-    } catch {
-      ocrResult = null;
-    }
-
-    const newDocId = 'doc-' + Date.now();
     let newDoc: DocumentRecord;
-
-    if (ocrResult && ocrResult.success && ocrResult.extractedItems && ocrResult.extractedItems.length > 0) {
-      newDoc = {
-        id: newDocId,
-        parentId: activeParent.id,
-        fileName: fileName,
-        docType: (ocrResult.documentType as any) || (isBill ? 'ELECTRICITY_BILL' : 'PRESCRIPTION'),
-        issuer: ocrResult.issuer || {
-          title: 'Dr. S. K. Verma, M.D.',
-          subtitle: 'Consultant Physician & Cardiologist • PMCH Patna',
-          address: 'Exhibition Road Chauraha, Patna - 800001',
-          regOrConsumer: 'BCMR / 2004 / 4891'
-        },
-        patientOrConsumerName: ocrResult.patientOrConsumerName || activeParent.name,
-        consultDate: ocrResult.consultDate || 'Today',
-        vitalsOrSummary: ocrResult.vitalsOrSummary || `${activeParent.vitals.bloodPressure} • Fasting: ${activeParent.vitals.bloodSugarFasting}`,
-        extractedItems: ocrResult.extractedItems
-      };
-    } else {
-      // Grounded clinical fallback
-      newDoc = {
-        id: newDocId,
-        parentId: activeParent.id,
-        fileName: fileName,
-        docType: isBill ? 'ELECTRICITY_BILL' : 'PRESCRIPTION',
-        issuer: isBill
-          ? {
-              title: 'SBPDCL Patna Urban Desk',
-              subtitle: 'South Bihar Power Distribution Company Ltd',
-              address: 'Vidyut Bhawan, Bailey Road, Patna - 800021',
-              regOrConsumer: activeParent.vendors.electricity.consumerId
-            }
-          : {
-              title: 'Dr. Rajiv N. Jha, M.D.',
-              subtitle: 'Senior Consultant Physician & Geriatric Specialist',
-              address: 'Fraser Road Chauraha, Patna - 800001',
-              regOrConsumer: 'BCMR / 2015 / 8831'
-            },
-        patientOrConsumerName: activeParent.name,
-        consultDate: 'Today',
-        vitalsOrSummary: `${activeParent.vitals.bloodPressure} • Fasting: ${activeParent.vitals.bloodSugarFasting}`,
-        extractedItems: isBill
-          ? [
-              {
-                id: `item-${Date.now()}-1`,
-                name: 'Electricity Consumption (Cycle Total)',
-                dosage: 'LT Domestic',
-                category: 'Utility',
-                frequency: 'Once Daily (Morning)',
-                frequencyCode: 'OD',
-                instruction: 'Domestic slab with government power subsidy',
-                triggerSlot: '18th of Every Month',
-                confidenceScore: 0.99,
-                rawOcrText: 'Net Payable Amount: ₹1,420.00',
-                sourceBox: { top: 38, left: 12, width: 76, height: 7 },
-                status: 'verified'
-              }
-            ]
-          : [
-              {
-                id: `item-${Date.now()}-1`,
-                name: 'Tab Cilnidipine',
-                dosage: '10 mg',
-                category: 'Cardio',
-                frequency: 'Once Daily (Morning)',
-                frequencyCode: 'OD',
-                instruction: '1 tablet once daily morning after breakfast',
-                triggerSlot: '08:00 AM Tomorrow',
-                confidenceScore: 0.98,
-                rawOcrText: 'Tab. Cilnidipine 10mg OD (Post Breakfast)',
-                sourceBox: { top: 36, left: 12, width: 76, height: 7 },
-                status: 'verified'
-              },
-              {
-                id: `item-${Date.now()}-2`,
-                name: 'Tab Metformin SR',
-                dosage: '500 mg',
-                category: 'Diabetes',
-                frequency: 'Twice Daily (Morning & Night)',
-                frequencyCode: 'BD',
-                instruction: '1 tablet twice daily with principal meals',
-                triggerSlot: '08:30 AM & 08:30 PM',
-                confidenceScore: 0.96,
-                rawOcrText: 'Tab. Metformin 500mg SR BD',
-                sourceBox: { top: 46, left: 12, width: 76, height: 7 },
-                status: 'verified'
-              },
-              {
-                id: `item-${Date.now()}-3`,
-                name: 'Tab Neurobion Forte',
-                dosage: '1 B-Complex Tab',
-                category: 'Supplement',
-                frequency: 'Once Daily (Morning)',
-                frequencyCode: 'OD',
-                instruction: '1 tablet daily after lunch for nerve support',
-                triggerSlot: '01:30 PM Tomorrow',
-                confidenceScore: 0.94,
-                rawOcrText: 'Tab. Neurobion Forte OD',
-                sourceBox: { top: 56, left: 12, width: 76, height: 7 },
-                status: 'verified'
-              }
-            ]
-      };
+    const fileName = typeof file === 'string' ? file : file.name || 'prescription_document.png';
+    try {
+      const scanResult = await processPrescriptionScan(file);
+      newDoc = convertToDocumentRecord(scanResult, activeParent.id, fileName);
+    } catch (e) {
+      console.warn('Multimodal vision scan fallback:', e);
+      newDoc = parseUploadedDocument(file, activeParent);
     }
 
-    setDocuments((prev) => [newDoc, ...prev]);
+    setDocuments((prev) => [newDoc, ...prev.filter(d => d.id !== newDoc.id)]);
     setActiveDocument(newDoc);
     setIsOcrProcessing(false);
 
@@ -409,28 +306,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     apiService.postDocument(newDoc).catch(() => {});
 
     const avgConf = Math.round(
-      (newDoc.extractedItems.reduce((acc, i) => acc + (i.confidenceScore || 0.95), 0) / newDoc.extractedItems.length) * 100
+      (newDoc.extractedItems.reduce((acc, i) => acc + (i.confidenceScore || 0.95), 0) / (newDoc.extractedItems.length || 1)) * 100
     );
 
     addEventLog({
       agentSource: 'Track B Vision OCR Pipeline',
       eventType: 'DOCUMENT_OCR_INTAKE_PROCESSED',
       severity: 'success',
-      details: `Parsed uploaded document "${fileName}". Extracted ${newDoc.extractedItems.length} entities with ${avgConf}% confidence for ${activeParent.name}.`,
+      details: `Parsed uploaded document "${newDoc.fileName}". Extracted ${newDoc.extractedItems.length} entities with ${avgConf}% confidence for ${activeParent.name}.`,
       payload: {
-        fileName,
-        patient: activeParent.name,
+        fileName: newDoc.fileName,
+        patient: newDoc.patientOrConsumerName,
         docType: newDoc.docType,
         extractedCount: newDoc.extractedItems.length,
-        guardrailAudit: ocrResult?.guardrailAudit || { status: 'PASSED_CLINICAL_GATE' }
+        issuer: newDoc.issuer.title
       }
     });
 
     addToast({
       type: 'success',
       title: 'Vision OCR Extraction Complete',
-      message: `Extracted ${newDoc.extractedItems.length} entities from "${fileName}". Schedule table ready for verification.`
+      message: `Extracted ${newDoc.extractedItems.length} entities from "${newDoc.fileName}". Schedule table ready for verification.`
     });
+
+    return newDoc;
   };
 
   // Global Keyboard Shortcuts (1 -> Command Board, 2 -> Document Review, 3 -> Agent Pipeline)
@@ -466,15 +365,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // Append-only tamper-evident immutable audit log writer
   const addEventLog = (log: Omit<EventLogItem, 'id' | 'timestamp'>) => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-IN', { hour12: false }) + ' IST';
-    const newLog: EventLogItem = {
-      ...log,
-      id: 'log-' + Math.random().toString(36).substring(2, 9),
-      timestamp: timeStr
-    };
-    setEventLogs((prev) => [newLog, ...prev]);
+    const immutableLog = createImmutableEventLog(log);
+    setEventLogs((prev) => [immutableLog, ...prev]);
   };
 
   const addCriticalFlag = (flag: Omit<CriticalFlag, 'id' | 'timestamp'>) => {
@@ -519,6 +413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     apiService.approveTask(taskId);
 
     const isChemist = task.category === 'chemist';
+    const financialGate = evaluateFinancialGuardrail(task.amount);
 
     setTasks((prev) =>
       prev.map((t) =>
@@ -553,6 +448,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       payload: {
         taskId: task.id,
         amount: task.amount || 0,
+        financialGateEvaluation: financialGate,
         authorizedAt: new Date().toISOString(),
         authType: 'CHILD_DASHBOARD_SIGN_OFF'
       }

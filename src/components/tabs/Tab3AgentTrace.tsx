@@ -207,7 +207,9 @@ export const Tab3AgentTrace: React.FC = () => {
               <span className="text-xs font-bold text-white uppercase tracking-wider">
                 Live State & Execution Event Log
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">({filteredLogs.length} Events)</span>
+              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded">
+                ● Immutable Audit Hash Chain Active
+              </span>
             </div>
 
             {/* Filter Chips & Stream Pause Toggle */}
@@ -242,6 +244,7 @@ export const Tab3AgentTrace: React.FC = () => {
           <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 font-mono text-xs">
             {filteredLogs.map((log) => {
               const isCopied = copiedLogId === log.id;
+              const auditMeta = (log.payload as any)?._audit;
 
               return (
                 <div
@@ -259,6 +262,11 @@ export const Tab3AgentTrace: React.FC = () => {
                   <div className="space-y-1 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[10px] text-slate-500">{log.timestamp}</span>
+                      {auditMeta?.sequence && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-amber-300 border border-slate-700 font-bold">
+                          #{auditMeta.sequence}
+                        </span>
+                      )}
                       <span className="px-1.5 py-0.2 rounded bg-slate-800 text-teal-300 text-[10px] font-bold">
                         {log.agentSource}
                       </span>
@@ -267,6 +275,12 @@ export const Tab3AgentTrace: React.FC = () => {
                     <p className="text-[11px] font-sans text-slate-200 leading-relaxed">
                       {log.details}
                     </p>
+                    {auditMeta?.hash && (
+                      <div className="text-[9px] text-slate-500 font-mono pt-0.5 flex items-center gap-1">
+                        <span className="text-emerald-500/70 font-semibold">Integrity Sig:</span>
+                        <span>{auditMeta.hash}</span>
+                      </div>
+                    )}
                   </div>
 
                   <button

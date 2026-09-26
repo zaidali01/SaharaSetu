@@ -10,11 +10,17 @@ import {
   ShieldCheck, 
   ScanLine,
   FileText,
-  Plus
+  Zap,
+  Check,
+  Key,
+  X,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PrescriptionCanvas } from '../prescription/PrescriptionCanvas';
 import { playSound } from '../../utils/audio';
+import { getActiveGeminiApiKey, setActiveGeminiApiKey } from '../../services/geminiVision';
 
 export const Tab2DocumentIntake: React.FC = () => {
   const { 
@@ -28,13 +34,73 @@ export const Tab2DocumentIntake: React.FC = () => {
     activeDocument,
     setActiveDocument,
     uploadDocument,
-    isOcrProcessing,
-    backendStatus
+    isOcrProcessing
   } = useApp();
 
+  const [activeDocId, setActiveDocId] = useState<'verma' | 'roy' | 'sbpdcl' | 'custom'>('verma');
   const [isDragging, setIsDragging] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+
+  // Gemini API Key in-app configurator
+  const [geminiKey, setGeminiKey] = useState<string>(getActiveGeminiApiKey() || '');
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [tempKey, setTempKey] = useState('');
+
+  const handleSaveApiKey = () => {
+    setActiveGeminiApiKey(tempKey);
+    setGeminiKey(tempKey.trim());
+    setIsKeyModalOpen(false);
+    playSound('approval');
+  };
+
+  // Sync activeDocId with activeDocument if updated externally
+  React.useEffect(() => {
+    if (activeDocument.id === 'doc-1') setActiveDocId('verma');
+    else if (activeDocument.id === 'doc-2') setActiveDocId('roy');
+    else if (activeDocument.id === 'doc-3') setActiveDocId('sbpdcl');
+    else setActiveDocId('custom');
+  }, [activeDocument.id]);
+
+  // 3 Sample Presets
+  const samplePresets: {
+    id: 'verma' | 'roy' | 'sbpdcl';
+    docId: string;
+    label: string;
+    icon: React.ElementType;
+    badge: string;
+  }[] = [
+    {
+      id: 'verma',
+      docId: 'doc-1',
+      label: 'Sample 1: Dr. S.K. Verma (Cardio / BP)',
+      icon: FileText,
+      badge: 'Cardio Rx'
+    },
+    {
+      id: 'roy',
+      docId: 'doc-2',
+      label: 'Sample 2: Dr. Anita Roy (Ortho / Joint Care)',
+      icon: FileText,
+      badge: 'Ortho Rx'
+    },
+    {
+      id: 'sbpdcl',
+      docId: 'doc-3',
+      label: 'Sample 3: SBPDCL Electricity Bill',
+      icon: Zap,
+      badge: 'Utility Bill'
+    }
+  ];
+
+  const handleSelectPreset = (presetKey: 'verma' | 'roy' | 'sbpdcl', docId: string) => {
+    setActiveDocId(presetKey);
+    const doc = documents.find(d => d.id === docId);
+    if (doc) {
+      playSound('ping');
+      setActiveDocument(doc);
+    }
+  };
 
   const handleFrequencyChange = (id: string, newFreq: string) => {
     setPrescriptionItems(prev =>
@@ -48,43 +114,102 @@ export const Tab2DocumentIntake: React.FC = () => {
     );
   };
 
-  const triggerScanAnimation = async (fileInput: File | string) => {
+  const handleDosageChange = (id: string, newDosage: string) => {
+    setPrescriptionItems(prev =>
+      prev.map(item => (item.id === id ? { ...item, dosage: newDosage } : item))
+    );
+  };
+
+  const handleTriggerTimeChange = (id: string, newTime: string) => {
+    setPrescriptionItems(prev =>
+      prev.map(item => (item.id === id ? { ...item, nextTriggerTime: newTime } : item))
+    );
+  };
+
+  const handleAddItem = () => {
+    const newItem = {
+      id: `rx-manual-${Date.now()}`,
+      medicineName: 'Tab. New Medication',
+      dosage: '10mg',
+      category: 'General',
+      frequency: 'Once Daily (Morning)',
+      frequencyCode: 'OD',
+      instruction: '1 dose once daily as directed',
+      nextTriggerTime: '08:00 AM Tomorrow',
+      confidence: 0.99,
+      rawOcrText: 'Tab. New Medication 10mg OD',
+      sourceBox: { top: 38 + prescriptionItems.length * 12, left: 12, width: 76, height: 8 },
+      status: 'verified' as const
+    };
+    setPrescriptionItems(prev => [...prev, newItem]);
+    setSelectedRxId(newItem.id);
+    playSound('ping');
+  };
+
+  const handleDeleteItem = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPrescriptionItems(prev => prev.filter(item => item.id !== id));
+    playSound('ping');
+  };
+
+  // Instant File Preview + Asynchronous Vision OCR Pipeline
+  const handleProcessUploadedFile = async (fileOrName: File | { name: string; previewImageUrl?: string } | string) => {
+    setActiveDocId('custom');
     setIsScanning(true);
     setScanProgress(20);
     playSound('ping');
 
-    const fileName = typeof fileInput === 'string' ? fileInput : fileInput.name;
+    let previewUrl = '';
+    const fileName = typeof fileOrName === 'string' ? fileOrName : fileOrName.name;
+    const isFileInstance = typeof window !== 'undefined' && fileOrName instanceof File;
 
-    // Smooth visual progress indicating Vision OCR stages
-    const timer1 = setTimeout(() => setScanProgress(55), 250);
-    const timer2 = setTimeout(() => setScanProgress(85), 550);
+    if (isFileInstance) {
+      previewUrl = URL.createObjectURL(fileOrName as File);
+    } else if (typeof fileOrName === 'object' && 'previewImageUrl' in fileOrName && fileOrName.previewImageUrl) {
+      previewUrl = fileOrName.previewImageUrl;
+    }
 
+    // 1. Instantly display the real uploaded image preview in the UI
+    const immediateDoc = {
+      id: `doc-uploaded-${Date.now()}`,
+      parentId: activeParent.id,
+      fileName,
+      docType: (fileName.toLowerCase().includes('bill') ? 'ELECTRICITY_BILL' : 'PRESCRIPTION') as 'ELECTRICITY_BILL' | 'PRESCRIPTION',
+      previewImageUrl: previewUrl || undefined,
+      issuer: {
+        title: 'OCR Extraction Active...',
+        subtitle: 'Parsing clinical entities & dosage cadences',
+        address: 'Multimodal Vision OCR Engine',
+        regOrConsumer: 'SCAN-ACTIVE'
+      },
+      patientOrConsumerName: activeParent.name,
+      consultDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      vitalsOrSummary: 'Analyzing vitals & medical schedule...',
+      extractedItems: []
+    };
+
+    setActiveDocument(immediateDoc);
+    setScanProgress(45);
+
+    // 2. Perform deep multimodal vision OCR asynchronously
     try {
-      if (typeof fileInput === 'string') {
-        await uploadDocument({ name: fileName });
-      } else {
-        await uploadDocument(fileInput);
-      }
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      setScanProgress(100);
+      setScanProgress(70);
+      await uploadDocument(typeof fileOrName === 'string' ? { name: fileOrName } : fileOrName);
+      setScanProgress(95);
       setTimeout(() => {
+        setScanProgress(100);
         setIsScanning(false);
         playSound('approval');
-      }, 350);
-    } catch {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      setScanProgress(100);
-      setTimeout(() => {
-        setIsScanning(false);
-      }, 350);
+      }, 150);
+    } catch (err) {
+      console.error('OCR processing error:', err);
+      setIsScanning(false);
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      triggerScanAnimation(e.target.files[0]);
+      handleProcessUploadedFile(e.target.files[0]);
     }
   };
 
@@ -107,56 +232,147 @@ export const Tab2DocumentIntake: React.FC = () => {
           </p>
         </div>
 
-        {/* Safety & Pipeline Indicator Badges */}
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
-          <div className="flex items-center gap-1.5 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200 text-indigo-800 text-xs font-semibold">
-            <ScanLine className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Track B Vision OCR: {backendStatus === 'connected' ? 'Live Multimodal Engine' : 'Grounded Fallback Engine'}</span>
-          </div>
-          <div className="flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-800 text-xs font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+        {/* OCR Engine Config & Safety Indicator Badge */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => {
+              setTempKey(geminiKey);
+              setIsKeyModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium cursor-pointer transition-all bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 shadow-2xs"
+            title="Configure Vision OCR Engine"
+          >
+            <Zap className={`w-3.5 h-3.5 ${geminiKey ? 'text-teal-600' : 'text-indigo-600'}`} />
+            <span className="font-semibold">
+              {geminiKey ? 'Gemini 2.0 Flash Active' : 'Client In-Browser OCR Active'}
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {geminiKey ? '(Cloud API)' : '(Tesseract Engine)'}
+            </span>
+          </button>
+
+          <div className="flex items-center gap-2 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200 text-emerald-800 text-xs font-semibold shrink-0">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
             <span>Anti-Hallucination Safe Review</span>
           </div>
         </div>
       </div>
 
-      {/* Dynamic Document Pill Switcher */}
-      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider pl-1">
-            Active Grounded Docs:
+      {/* API Key Modal */}
+      <AnimatePresence>
+        {isKeyModalOpen && (
+          <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Key className="w-4 h-4 text-teal-600" />
+                  <h3 className="font-semibold text-slate-900 text-sm">Configure Gemini Vision API Key</h3>
+                </div>
+                <button
+                  onClick={() => setIsKeyModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Enter your Google Gemini API key to enable live multimodal Gemini 2.0 Flash extraction for any uploaded image. If blank, SaharaSetu uses the built-in client-side Tesseract.js OCR engine.
+              </p>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Gemini API Key
+                </label>
+                <input
+                  type="password"
+                  value={tempKey}
+                  onChange={(e) => setTempKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempKey('');
+                    setActiveGeminiApiKey('');
+                    setGeminiKey('');
+                    setIsKeyModalOpen(false);
+                    playSound('ping');
+                  }}
+                  className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                >
+                  Clear Key (Use Client OCR)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveApiKey}
+                  className="px-4 py-1.5 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                >
+                  Save & Enable
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Recent Ingestion Records & Presets */}
+      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider pl-0.5">
+            Recent Ingestion Records & Presets:
           </span>
-          {documents.map((doc) => {
-            const isActive = activeDocument.id === doc.id;
+          <span className="text-[11px] text-slate-400">
+            Click any record to inspect verified extraction & bounding coordinates
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {samplePresets.map((preset) => {
+            const isActive = activeDocId === preset.id;
+            const IconComponent = preset.icon;
+
             return (
               <button
-                key={doc.id}
-                onClick={() => setActiveDocument(doc)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                key={preset.id}
+                type="button"
+                onClick={() => handleSelectPreset(preset.id, preset.docId)}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
                   isActive
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    ? 'border-slate-900 bg-slate-900 text-white shadow-xs scale-[1.01]'
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800'
                 }`}
               >
-                <FileText className="w-3.5 h-3.5" />
-                <span>{doc.fileName}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                <div className="flex items-center gap-2 truncate">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    isActive ? 'bg-slate-800 text-teal-300' : 'bg-white text-slate-700 border border-slate-200'
+                  }`}>
+                    <IconComponent className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-medium truncate">
+                    {preset.label}
+                  </span>
+                </div>
+
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 ${
                   isActive ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-600'
                 }`}>
-                  {doc.docType === 'PRESCRIPTION' ? 'Rx' : 'Bill'}
+                  {preset.badge}
                 </span>
               </button>
             );
           })}
         </div>
-
-        <button
-          onClick={() => triggerScanAnimation(`rx_dr_jha_patna_${Date.now().toString().slice(-4)}.pdf`)}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 flex items-center gap-1 transition-all cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Simulate Upload</span>
-        </button>
       </div>
 
       {/* Split-Screen Layout: Left Side (Task 4.1) & Right Side (Task 4.2) */}
@@ -175,9 +391,9 @@ export const Tab2DocumentIntake: React.FC = () => {
               e.preventDefault();
               setIsDragging(false);
               if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                triggerScanAnimation(e.dataTransfer.files[0]);
+                handleProcessUploadedFile(e.dataTransfer.files[0]);
               } else {
-                triggerScanAnimation('dr_verma_prescription_pmch.pdf');
+                handleProcessUploadedFile('dr_anjali_deshmukh_prescription.png');
               }
             }}
             className={`p-5 rounded-2xl border-2 border-dashed transition-all text-center cursor-pointer ${
@@ -199,13 +415,13 @@ export const Tab2DocumentIntake: React.FC = () => {
               <h4 className="text-xs font-semibold text-slate-800">
                 Drop New Prescription or Lab Scan Here
               </h4>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Supports PDF, PNG, JPG scans ({activeDocument.issuer.title} loaded)
+              <p className="text-[11px] text-slate-500 mt-0.5 font-mono truncate max-w-sm mx-auto">
+                Supports PDF, PNG, JPG • Loaded: {activeDocument.fileName} ({activeDocument.issuer.title})
               </p>
             </label>
           </div>
 
-          {/* Scanning Progress Overlay / Skeleton if active */}
+          {/* Scanning Progress Overlay / Skeleton if active (1.2s realistic scanner) */}
           <AnimatePresence>
             {(isScanning || isOcrProcessing) && (
               <motion.div
@@ -217,18 +433,22 @@ export const Tab2DocumentIntake: React.FC = () => {
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-2 font-mono text-teal-300">
                     <ScanLine className="w-4 h-4 animate-pulse text-teal-400" />
-                    Track B Multimodal Vision OCR running...
+                    {scanProgress < 40
+                      ? 'Scanning document pixels with OCR Engine...'
+                      : scanProgress < 75
+                      ? 'Detecting prescription molecules & dosages...'
+                      : 'Mapping bounding boxes to schedule slots...'}
                   </span>
                   <span className="font-mono text-xs text-teal-400 font-bold">{scanProgress}%</span>
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
                   <motion.div
-                    className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-300"
+                    className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-100"
                     style={{ width: `${scanProgress}%` }}
                   />
                 </div>
                 <p className="text-[10px] text-slate-400 font-mono">
-                  Vision pipeline: Segmenting bounding boxes, extracting medicines, NDC verification & dosage guardrails...
+                  Grounded extraction &bull; {geminiKey ? 'Gemini 2.0 Flash Multimodal Vision' : 'Client-Side In-Browser Optical Character Recognition'}
                 </p>
               </motion.div>
             )}
@@ -265,12 +485,23 @@ export const Tab2DocumentIntake: React.FC = () => {
                   Pre-Activation Schedule Verification Table
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Anti-hallucination safe review before syncing to IVR caller agent
+                  Anti-hallucination safe review &bull; Grounded to {activeDocument.issuer.title}
                 </p>
               </div>
-              <span className="text-xs font-semibold text-teal-800 bg-teal-100 px-2.5 py-0.5 rounded-full">
-                {prescriptionItems.length} Items Extracted
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                  title="Add medication or schedule item"
+                >
+                  <Plus className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Add Line Item</span>
+                </button>
+                <span className="text-xs font-semibold text-teal-800 bg-teal-100 px-2.5 py-1 rounded-full">
+                  {prescriptionItems.length} Items Extracted
+                </span>
+              </div>
             </div>
 
             {/* Table wrapper with overflow-x-auto and tight cell padding */}
@@ -283,6 +514,7 @@ export const Tab2DocumentIntake: React.FC = () => {
                     <th className="px-3 py-2.5">Cadence</th>
                     <th className="px-3 py-2.5">Next Refill Date</th>
                     <th className="px-3 py-2.5 text-right">Confidence</th>
+                    <th className="px-2 py-2.5 text-center w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -294,7 +526,7 @@ export const Tab2DocumentIntake: React.FC = () => {
                       <tr
                         key={item.id}
                         onClick={() => setSelectedRxId(item.id)}
-                        className={`transition-colors cursor-pointer ${
+                        className={`transition-colors cursor-pointer group ${
                           isSelected ? 'bg-teal-50/70 font-medium' : 'hover:bg-slate-50'
                         }`}
                       >
@@ -304,14 +536,19 @@ export const Tab2DocumentIntake: React.FC = () => {
                             <span className="w-4 h-4 rounded bg-slate-200 text-slate-700 flex items-center justify-center font-mono text-[9px] font-bold shrink-0">
                               {idx + 1}
                             </span>
-                            <div>
+                            <div className="space-y-0.5">
                               <input
                                 type="text"
                                 value={item.medicineName}
                                 onChange={(e) => handleNameChange(item.id, e.target.value)}
-                                className="font-semibold text-slate-900 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none"
+                                className="font-semibold text-slate-900 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none w-full"
                               />
-                              <p className="text-[10px] text-slate-500 font-mono">{item.dosage}</p>
+                              <input
+                                type="text"
+                                value={item.dosage}
+                                onChange={(e) => handleDosageChange(item.id, e.target.value)}
+                                className="text-[10px] text-slate-500 font-mono bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none w-full"
+                              />
                             </div>
                           </div>
                         </td>
@@ -334,14 +571,20 @@ export const Tab2DocumentIntake: React.FC = () => {
                             <option value="Twice Daily (Morning & Night)">Twice Daily (Morning & Night)</option>
                             <option value="At Bedtime (Night)">At Bedtime (Night)</option>
                             <option value="As Needed (SOS)">As Needed (SOS)</option>
+                            <option value="Monthly Recurring Cycle">Monthly Recurring Cycle</option>
                           </select>
                         </td>
 
                         {/* Next Refill Trigger Time */}
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1 text-slate-600 font-mono text-[11px]">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            <span>{item.nextTriggerTime}</span>
+                            <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                            <input
+                              type="text"
+                              value={item.nextTriggerTime}
+                              onChange={(e) => handleTriggerTimeChange(item.id, e.target.value)}
+                              className="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none text-[11px] font-mono text-slate-700"
+                            />
                           </div>
                         </td>
 
@@ -356,6 +599,18 @@ export const Tab2DocumentIntake: React.FC = () => {
                             {(item.confidence * 100).toFixed(0)}%
                           </span>
                         </td>
+
+                        {/* Delete Action */}
+                        <td className="px-2 py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteItem(item.id, e)}
+                            className="opacity-40 group-hover:opacity-100 hover:text-rose-600 p-1 rounded transition-opacity cursor-pointer"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -368,7 +623,7 @@ export const Tab2DocumentIntake: React.FC = () => {
               <div className="flex items-center gap-2 text-xs text-slate-600">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span>
-                  All {prescriptionItems.length} items grounded to <strong>{activeDocument.issuer.title}</strong>
+                  All {prescriptionItems.length} items grounded to <strong>{activeDocument.issuer.title}</strong> ({activeDocument.patientOrConsumerName})
                 </span>
               </div>
 
@@ -377,6 +632,7 @@ export const Tab2DocumentIntake: React.FC = () => {
                 onClick={approvePrescriptionSchedule}
                 className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
               >
+                <Check className="w-4 h-4 text-emerald-400" />
                 <span>Approve & Activate Schedule</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>

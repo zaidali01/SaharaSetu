@@ -313,11 +313,20 @@ export const Tab1CommandBoard: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* Clean Amount Details Box */}
+                  {/* Clean Amount Details Box with ₹1,000 Financial Gate Callout */}
                   {task.amount && (
-                    <div className="border border-slate-200 bg-slate-50/70 rounded-lg p-2.5 flex items-center justify-between text-xs">
-                      <span className="text-slate-500 font-medium">Order Amount:</span>
-                      <span className="font-mono font-semibold text-sm text-slate-900">₹{task.amount.toFixed(2)}</span>
+                    <div className="space-y-1.5">
+                      <div className="border border-slate-200 bg-slate-50/70 rounded-lg p-2.5 flex items-center justify-between text-xs">
+                        <span className="text-slate-500 font-medium">Order Amount:</span>
+                        <span className="font-mono font-semibold text-sm text-slate-900">₹{task.amount.toFixed(2)}</span>
+                      </div>
+
+                      {task.amount > 1000 && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 border border-amber-200/80 text-[10px] text-amber-900 font-medium">
+                          <ShieldCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span>₹1,000 Financial Gate Active: Sign-off mandated by policy</span>
+                        </div>
+                      )}
                     </div>
                   )}
 
