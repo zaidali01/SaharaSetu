@@ -1,258 +1,207 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  CheckCircle2, 
-  Clock, 
-  Play, 
-  Check, 
-  MessageSquare, 
-  Zap, 
-  Pill, 
-  PhoneCall, 
-  ShoppingBag, 
-  PhoneForwarded, 
-  Layers,
-  ChevronRight,
-  ShieldCheck,
-  CheckCircle,
-  FileSearch,
-  Activity,
-  RefreshCw
+import {
+  CheckCircle2, Clock, Play, Check, MessageSquare, Zap, Pill,
+  PhoneCall, ShoppingBag, PhoneForwarded, Layers, ChevronRight,
+  ShieldCheck, CheckCircle, FileSearch, Activity, RefreshCw
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
+/* ─── Shared card style ─────────────────────────────────── */
+const C = {
+  dark:     'var(--color-forest-depths)',
+  surface:  'var(--color-moss-shadow)',
+  border:   'var(--color-moss-shadow)',
+  sprout:   'var(--color-electric-sprout)',
+  sage:     'var(--color-lichen-sage)',
+  white:    'var(--color-pure-white)',
+  bone:     'var(--color-bone-white)',
+  onyx:     'var(--color-onyx-olive)',
+  fern:     'var(--color-pale-fern)',
+  wash:     'var(--color-sprout-wash)',
+};
+
+const colWell: React.CSSProperties = {
+  background: 'rgba(39,63,43,0.28)',
+  border: '1px solid rgba(39,63,43,0.6)',
+  borderRadius: 20,
+  padding: 16,
+  minHeight: 600,
+};
+
+const taskCard: React.CSSProperties = {
+  background: 'rgba(18,35,20,0.85)',
+  border: '1px solid var(--color-moss-shadow)',
+  borderRadius: 16,
+  padding: 16,
+  cursor: 'grab',
+  backdropFilter: 'blur(8px)',
+};
+
 export const Tab1CommandBoard: React.FC = () => {
-  const { 
-    tasks, 
-    approveTask, 
-    rejectTask, 
-    setActiveTranscriptTask, 
-    setActiveWhatsAppTask, 
-    setActiveChemistModalTask,
-    setActiveAuditTask,
-    activeParent,
-    backendStatus,
-    refreshFromBackend
+  const {
+    tasks, approveTask, rejectTask,
+    setActiveTranscriptTask, setActiveWhatsAppTask,
+    setActiveChemistModalTask, setActiveAuditTask,
+    activeParent, backendStatus, refreshFromBackend,
   } = useApp();
 
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
-  const filteredTasks = tasks.filter(t => {
-    if (categoryFilter === 'all') return true;
-    return t.category === categoryFilter;
-  });
-
-  const doneTasks = filteredTasks.filter((t) => t.column === 'done');
-  const needsApprovalTasks = filteredTasks.filter((t) => t.column === 'needs_approval');
-  const blockedTasks = filteredTasks.filter((t) => t.column === 'blocked');
-
-  // Stats calculation
-  const pendingFunds = needsApprovalTasks.reduce((acc, t) => acc + (t.amount || 0), 0);
+  const filteredTasks = tasks.filter(t => categoryFilter === 'all' || t.category === categoryFilter);
+  const doneTasks           = filteredTasks.filter(t => t.column === 'done');
+  const needsApprovalTasks  = filteredTasks.filter(t => t.column === 'needs_approval');
+  const blockedTasks        = filteredTasks.filter(t => t.column === 'blocked');
+  const pendingFunds        = needsApprovalTasks.reduce((acc, t) => acc + (t.amount || 0), 0);
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case 'medication':
-        return <Pill className="w-3.5 h-3.5 text-teal-600" />;
-      case 'utility':
-        return <Zap className="w-3.5 h-3.5 text-amber-600" />;
-      case 'chemist':
-        return <ShoppingBag className="w-3.5 h-3.5 text-indigo-600" />;
-      case 'checkin':
-        return <PhoneCall className="w-3.5 h-3.5 text-rose-600" />;
-      default:
-        return <Layers className="w-3.5 h-3.5 text-slate-600" />;
+      case 'medication': return <Pill size={14} color="var(--color-electric-sprout)" />;
+      case 'utility':    return <Zap size={14} color="#f59e0b" />;
+      case 'chemist':    return <ShoppingBag size={14} color="var(--color-electric-sprout)" />;
+      case 'checkin':    return <PhoneCall size={14} color="#ef4444" />;
+      default:           return <Layers size={14} color="var(--color-lichen-sage)" />;
     }
   };
 
+  const filters = [
+    { id: 'all', label: 'All Tasks' },
+    { id: 'medication', label: 'Medications' },
+    { id: 'chemist', label: 'Chemist' },
+    { id: 'utility', label: 'Utilities' },
+    { id: 'checkin', label: 'Voice Calls' },
+  ];
+
   return (
-    <div className="space-y-6 pb-20">
-      
-      {/* Layer 2 Surface: Crisp White Segmented KPI Stat Banner */}
-      <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 mb-6 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200">
-        
-        {/* Stat 1 */}
-        <div className="p-2 sm:px-4 flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
-              Operations Done Today
-            </span>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-base font-semibold text-slate-900">{doneTasks.length} Completed</span>
-              <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
-                +1 confirmed {activeParent.language.split('/')[0]}
-              </span>
-            </div>
-          </div>
-          <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200/70 text-emerald-700 flex items-center justify-center shrink-0">
-            <CheckCircle className="w-4 h-4" />
-          </div>
-        </div>
+    <div style={{ paddingBottom: 80 }}>
 
-        {/* Stat 2 */}
-        <div className="p-2 sm:px-4 flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
-              Awaiting Sign-off (Financial Gate)
-            </span>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-base font-semibold text-slate-900 font-mono">
-                ₹{pendingFunds > 0 ? pendingFunds.toFixed(2) : '1,252.00'}
-              </span>
-              <span className="text-xs text-slate-500">
-                ({needsApprovalTasks.length} Tasks in queue)
-              </span>
-            </div>
-          </div>
-          <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200/70 text-amber-700 flex items-center justify-center shrink-0">
-            <ShieldCheck className="w-4 h-4" />
-          </div>
+      {/* ── Page Header ── */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 700, color: C.white, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+            Command <span style={{ color: C.sprout }}>Board</span>
+          </h1>
+          <span className="badge badge-sage" style={{ fontSize: 11 }}>Tasks 4.3–4.5</span>
         </div>
-
-        {/* Stat 3 */}
-        <div className="p-2 sm:px-4 flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
-              Next Scheduled Check-in
-            </span>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-base font-semibold text-slate-900">
-                {activeParent.name.split(' ')[0]} • 8:00 PM Dinner Call
-              </span>
-              <span className="text-xs font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200/60">
-                Sarvam IVR
-              </span>
-            </div>
-          </div>
-          <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-200/70 text-indigo-700 flex items-center justify-center shrink-0">
-            <Activity className="w-4 h-4" />
-          </div>
-        </div>
-
+        <p style={{ color: C.sage, fontSize: 14 }}>
+          Live operations for <strong style={{ color: C.white }}>{activeParent.name}</strong> · {activeParent.city || 'Patna'} · {activeParent.preferredLanguage || 'Hindi'}
+        </p>
       </div>
 
-      {/* Filter Chips Bar */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {[
-            { id: 'all', label: 'All Tasks' },
-            { id: 'medication', label: 'Medications' },
-            { id: 'chemist', label: 'Chemist Dispatches' },
-            { id: 'utility', label: 'Utilities & Bills' },
-            { id: 'checkin', label: 'Voice Calls' }
-          ].map((cat) => (
+      {/* ── KPI Strip ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 12,
+        marginBottom: 24,
+      }}>
+        {[
+          { label: 'Completed Today', value: `${doneTasks.length} done`, sub: `+1 confirmed`, icon: <CheckCircle size={16} color={C.sprout} />, accent: C.sprout },
+          { label: 'Awaiting Sign-off', value: `₹${pendingFunds > 0 ? pendingFunds.toFixed(0) : '1,252'}`, sub: `${needsApprovalTasks.length} in queue`, icon: <ShieldCheck size={16} color="#f59e0b" />, accent: '#f59e0b' },
+          { label: 'Next Check-in', value: `8:00 PM`, sub: 'Dinner Call · Sarvam IVR', icon: <Activity size={16} color={C.sprout} />, accent: C.sprout },
+        ].map((stat, i) => (
+          <div key={i} style={{ ...taskCard, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 18px' }}>
+            <div>
+              <span style={{ fontSize: 11, fontWeight: 500, color: C.sage, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block' }}>{stat.label}</span>
+              <span style={{ fontSize: 18, fontWeight: 700, color: C.white, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>{stat.value}</span>
+              <span style={{ fontSize: 12, color: C.sage }}>{stat.sub}</span>
+            </div>
+            <div style={{ width: 38, height: 38, borderRadius: 10, border: `1px solid ${stat.accent}30`, background: `${stat.accent}10`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {stat.icon}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Filter bar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {filters.map(f => (
             <button
-              key={cat.id}
-              onClick={() => setCategoryFilter(cat.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                categoryFilter === cat.id
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
+              key={f.id}
+              onClick={() => setCategoryFilter(f.id)}
+              style={{
+                padding: '5px 14px',
+                borderRadius: 'var(--radius-pill)',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: categoryFilter === f.id ? 'none' : '1px solid var(--color-moss-shadow)',
+                background: categoryFilter === f.id ? C.sprout : 'transparent',
+                color: categoryFilter === f.id ? C.onyx : C.sage,
+                transition: 'all 0.15s',
+              }}
             >
-              {cat.label}
+              {f.label}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => refreshFromBackend()}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-            title="Poll Track C task queue and telemetry log"
-          >
-            <RefreshCw className="w-3 h-3 text-slate-500" />
-            <span>Sync Tasks ({backendStatus === 'connected' ? 'Live' : 'Cached'})</span>
-          </button>
-          <span className="text-xs text-slate-500 font-medium">
-            Showing {filteredTasks.length} active items for {activeParent.name} ({activeParent.location.split(',')[0]})
-          </span>
-        </div>
+        <button
+          onClick={() => refreshFromBackend()}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--color-moss-shadow)', background: 'transparent', color: C.sage, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}
+        >
+          <RefreshCw size={12} />
+          Sync · {backendStatus === 'connected' ? 'Live' : 'Cached'}
+        </button>
       </div>
 
-      {/* Tri-Column Kanban Grid: Layer 1 (Column Wells) -> Layer 2 (Pure Crisp White Cards) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        
-        {/* =========================================================================
-            COLUMN 1: DONE & VERIFIED (Layer 1 Well)
-        ========================================================================= */}
-        <div className="bg-slate-200/60 border border-slate-300/60 rounded-2xl p-4 min-h-[640px] space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-              <h3 className="font-semibold text-xs text-slate-900 tracking-tight uppercase">
-                Done & Verified
-              </h3>
+      {/* ── Tri-column Kanban ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, alignItems: 'start' }}>
+
+        {/* ─ COLUMN 1: Done & Verified ─ */}
+        <div style={colWell}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.sprout, display: 'inline-block' }} />
+              <span style={{ fontWeight: 600, fontSize: 12, color: C.fern, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Done & Verified</span>
             </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md text-emerald-800 bg-emerald-100 border border-emerald-200">
-              {doneTasks.length}
-            </span>
+            <span className="badge badge-sprout">{doneTasks.length}</span>
           </div>
 
-          {/* Cards List: Layer 2 Surface */}
-          <div className="space-y-3">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <AnimatePresence>
-              {doneTasks.map((task) => (
-                <motion.div
-                  key={task.id}
-                  layout
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white rounded-xl p-4 border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 cursor-grab space-y-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5">
-                      <div className="mt-0.5 p-1 rounded-md bg-slate-50 border border-slate-200 shrink-0">
+              {doneTasks.map(task => (
+                <motion.div key={task.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} style={taskCard}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', gap: 10, flex: 1 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(104,239,63,0.1)', border: '1px solid rgba(104,239,63,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                         {getCategoryIcon(task.category)}
                       </div>
                       <div>
-                        <h4 className="text-sm font-medium text-slate-900 leading-snug">
-                          {task.title}
-                        </h4>
-                        {task.subtitle && (
-                          <p className="text-xs text-slate-500 mt-0.5 leading-normal">
-                            {task.subtitle}
-                          </p>
-                        )}
+                        <h4 style={{ fontSize: 14, fontWeight: 600, color: C.white, lineHeight: 1.3 }}>{task.title}</h4>
+                        {task.subtitle && <p style={{ fontSize: 12, color: C.sage, marginTop: 2 }}>{task.subtitle}</p>}
                       </div>
                     </div>
-
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded text-emerald-800 bg-emerald-50 border border-emerald-200 shrink-0 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                      {task.badgeText || 'Done'}
+                    <span className="badge badge-sprout" style={{ fontSize: 10, flexShrink: 0 }}>
+                      <CheckCircle2 size={10} /> {task.badgeText || 'Done'}
                     </span>
                   </div>
 
-                  {/* Clean Verification Snippet with Light Slate Border */}
                   {task.verificationMethod && (
-                    <div className="border border-slate-200 bg-slate-50/70 rounded-lg p-2.5 text-xs text-slate-700 flex items-center justify-between">
-                      <span className="truncate pr-1 font-medium">{task.verificationMethod}</span>
-                      <span className="text-[10px] font-mono text-slate-500 shrink-0">{task.time}</span>
+                    <div style={{ background: 'rgba(39,63,43,0.5)', border: '1px solid var(--color-moss-shadow)', borderRadius: 10, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
+                      <span style={{ color: C.fern }}>{task.verificationMethod}</span>
+                      <span style={{ color: C.sage, fontFamily: 'var(--font-mono)', fontSize: 11 }}>{task.time}</span>
                     </div>
                   )}
 
-                  {/* Amount if utility */}
                   {task.amount && (
-                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                      <span className="text-slate-500">Auto-Mandate BBPS:</span>
-                      <span className="font-mono font-semibold text-slate-900">₹{task.amount.toFixed(2)}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, paddingTop: 8, borderTop: '1px solid var(--color-moss-shadow)' }}>
+                      <span style={{ color: C.sage }}>Auto-Mandate BBPS:</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: C.white }}>₹{task.amount.toFixed(2)}</span>
                     </div>
                   )}
 
-                  {/* Listen Transcript CTA if voice verified */}
                   {task.transcript && (
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-1 text-xs text-slate-500 font-mono">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{task.transcript.duration} min IVR</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid var(--color-moss-shadow)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.sage, fontSize: 12 }}>
+                        <Clock size={12} /> {task.transcript.duration} min IVR
                       </div>
-
                       <button
                         onClick={() => setActiveTranscriptTask(task)}
-                        className="rounded-lg text-xs font-medium px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer active:scale-[0.98]"
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 8, background: 'rgba(104,239,63,0.1)', border: '1px solid rgba(104,239,63,0.2)', color: C.sprout, fontSize: 12, cursor: 'pointer' }}
                       >
-                        <Play className="w-3 h-3 fill-slate-800 text-slate-800" />
-                        <span>Listen Transcript</span>
+                        <Play size={10} fill="currentColor" /> Listen
                       </button>
                     </div>
                   )}
@@ -262,232 +211,144 @@ export const Tab1CommandBoard: React.FC = () => {
           </div>
         </div>
 
-
-        {/* =========================================================================
-            COLUMN 2: NEEDS YOUR APPROVAL (Layer 1 Well)
-        ========================================================================= */}
-        <div className="bg-slate-200/60 border border-slate-300/60 rounded-2xl p-4 min-h-[640px] space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              <h3 className="font-semibold text-xs text-slate-900 tracking-tight uppercase">
-                Needs Your Approval
-              </h3>
+        {/* ─ COLUMN 2: Needs Approval ─ */}
+        <div style={colWell}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+              <span style={{ fontWeight: 600, fontSize: 12, color: C.fern, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Needs Approval</span>
             </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md text-amber-800 bg-amber-100 border border-amber-200">
-              {needsApprovalTasks.length} Pending
-            </span>
+            <span className="badge badge-amber">{needsApprovalTasks.length} Pending</span>
           </div>
 
-          {/* Cards List: Layer 2 Surface */}
-          <div className="space-y-3">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <AnimatePresence>
-              {needsApprovalTasks.map((task) => (
-                <motion.div
-                  key={task.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
-                  className="bg-white rounded-xl p-4 border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 cursor-grab space-y-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5">
-                      <div className="mt-0.5 p-1 rounded-md bg-slate-50 border border-slate-200 shrink-0">
+              {needsApprovalTasks.map(task => (
+                <motion.div key={task.id} layout initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, y: -16 }} style={taskCard}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', gap: 10, flex: 1 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                         {getCategoryIcon(task.category)}
                       </div>
                       <div>
-                        <h4 className="text-sm font-medium text-slate-900 leading-snug">
-                          {task.title}
-                        </h4>
-                        {task.subtitle && (
-                          <p className="text-xs text-slate-500 mt-0.5 leading-normal">
-                            {task.subtitle}
-                          </p>
-                        )}
+                        <h4 style={{ fontSize: 14, fontWeight: 600, color: C.white, lineHeight: 1.3 }}>{task.title}</h4>
+                        {task.subtitle && <p style={{ fontSize: 12, color: C.sage, marginTop: 2 }}>{task.subtitle}</p>}
                       </div>
                     </div>
-
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded text-amber-800 bg-amber-50 border border-amber-200 shrink-0">
-                      {task.badgeText || 'Sign-off Required'}
-                    </span>
+                    <span className="badge badge-amber" style={{ fontSize: 10, flexShrink: 0 }}>{task.badgeText || 'Sign-off'}</span>
                   </div>
 
-                  {/* Clean Amount Details Box */}
                   {task.amount && (
-                    <div className="border border-slate-200 bg-slate-50/70 rounded-lg p-2.5 flex items-center justify-between text-xs">
-                      <span className="text-slate-500 font-medium">Order Amount:</span>
-                      <span className="font-mono font-semibold text-sm text-slate-900">₹{task.amount.toFixed(2)}</span>
+                    <div style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 10 }}>
+                      <span style={{ color: C.sage }}>Order Amount:</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: C.white, fontSize: 15 }}>₹{task.amount.toFixed(2)}</span>
                     </div>
                   )}
 
-                  {/* Chemist WhatsApp preview popover button & Audit Trace Link */}
                   {task.whatsappDraft && (
-                    <div className="flex items-center justify-between pt-0.5">
-                      <button
-                        onClick={() => setActiveWhatsAppTask(task)}
-                        className="text-xs text-slate-800 hover:text-slate-950 font-medium flex items-center gap-1.5 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Preview Drafted WhatsApp</span>
-                        <ChevronRight className="w-3 h-3 text-slate-400" />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <button onClick={() => setActiveWhatsAppTask(task)} style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.sprout, fontSize: 12, background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                        <MessageSquare size={13} /> Preview WhatsApp Draft <ChevronRight size={12} />
                       </button>
-
-                      <button
-                        onClick={() => setActiveAuditTask(task)}
-                        className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
-                        title="View OCR confidence & guardrail audit trace"
-                      >
-                        <FileSearch className="w-3 h-3 text-slate-400" />
-                        <span>Audit Trace</span>
+                      <button onClick={() => setActiveAuditTask(task)} style={{ fontSize: 11, color: C.sage, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <FileSearch size={11} /> Audit
                       </button>
                     </div>
                   )}
 
-                  {/* LPG Cylinder Details with Clean Slate Border */}
                   {task.bookingDetails && (
-                    <div className="text-xs text-slate-600 space-y-1 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
-                      <div className="flex justify-between">
-                        <span>Consumer ID:</span>
-                        <span className="font-mono font-semibold text-slate-800">{task.bookingDetails.consumerNumber}</span>
+                    <div style={{ background: 'rgba(39,63,43,0.5)', border: '1px solid var(--color-moss-shadow)', borderRadius: 10, padding: '8px 12px', fontSize: 12, marginBottom: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ color: C.sage }}>Consumer ID:</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', color: C.white, fontWeight: 600 }}>{task.bookingDetails.consumerNumber}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>Schedule Due:</span>
-                        <span className="font-medium text-amber-800">{task.bookingDetails.dueDate}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: C.sage }}>Due:</span>
+                        <span style={{ color: '#f59e0b', fontWeight: 500 }}>{task.bookingDetails.dueDate}</span>
                       </div>
                     </div>
                   )}
 
-                  {/* Standardized Action Buttons: Solid dark slate button for Approve */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => rejectTask(task.id)}
-                      className="rounded-lg text-xs font-medium px-3 py-2 text-slate-600 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer active:scale-[0.98]"
-                    >
-                      Reject / Edit
+                  <div style={{ display: 'flex', gap: 8, paddingTop: 10, borderTop: '1px solid var(--color-moss-shadow)' }}>
+                    <button onClick={() => rejectTask(task.id)} className="btn-danger" style={{ flex: 1, justifyContent: 'center', fontSize: 12, padding: '7px 12px' }}>
+                      Reject
                     </button>
-
-                    <button
-                      onClick={() => approveTask(task.id)}
-                      className="rounded-lg text-xs font-medium px-3 py-2 text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1.5 shadow-xs active:scale-[0.98] transition-all cursor-pointer"
-                    >
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>{task.category === 'chemist' ? 'Approve & Dispatch' : 'Approve Booking'}</span>
+                    <button onClick={() => approveTask(task.id)} className="btn-primary" style={{ flex: 2, justifyContent: 'center', fontSize: 12, padding: '7px 14px', borderRadius: 8 }}>
+                      <Check size={13} /> {task.category === 'chemist' ? 'Approve & Dispatch' : 'Approve'}
                     </button>
                   </div>
                 </motion.div>
               ))}
             </AnimatePresence>
-
             {needsApprovalTasks.length === 0 && (
-              <div className="text-center py-12 bg-white/60 rounded-xl border border-dashed border-slate-300 text-xs text-slate-500">
-                ✨ Approval queue is clear! All dispatches authorized.
+              <div style={{ textAlign: 'center', padding: '40px 20px', border: '1px dashed var(--color-moss-shadow)', borderRadius: 14, color: C.sage, fontSize: 13 }}>
+                ✨ Approval queue clear
               </div>
             )}
           </div>
         </div>
 
-
-        {/* =========================================================================
-            COLUMN 3: COULDN'T COMPLETE / BLOCKERS (Layer 1 Well)
-        ========================================================================= */}
-        <div className="bg-slate-200/60 border border-slate-300/60 rounded-2xl p-4 min-h-[640px] space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-              <h3 className="font-semibold text-xs text-slate-900 tracking-tight uppercase">
-                Couldn't Complete / Blockers
-              </h3>
+        {/* ─ COLUMN 3: Blocked ─ */}
+        <div style={colWell}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+              <span style={{ fontWeight: 600, fontSize: 12, color: C.fern, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Couldn't Complete</span>
             </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md text-rose-800 bg-rose-100 border border-rose-200">
-              {blockedTasks.length} Issues
-            </span>
+            <span className="badge badge-red">{blockedTasks.length} Issues</span>
           </div>
 
-          {/* Cards List: Layer 2 Surface */}
-          <div className="space-y-3">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <AnimatePresence>
-              {blockedTasks.map((task) => (
-                <motion.div
-                  key={task.id}
-                  layout
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-white rounded-xl p-4 border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 cursor-grab space-y-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5">
-                      <div className="mt-0.5 p-1 rounded-md bg-slate-50 border border-slate-200 shrink-0">
+              {blockedTasks.map(task => (
+                <motion.div key={task.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={taskCard}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', gap: 10, flex: 1 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                         {getCategoryIcon(task.category)}
                       </div>
                       <div>
-                        <h4 className="text-sm font-medium text-slate-900 leading-snug">
-                          {task.title}
-                        </h4>
-                        {task.subtitle && (
-                          <p className="text-xs text-slate-500 mt-0.5 leading-normal">
-                            {task.subtitle}
-                          </p>
-                        )}
+                        <h4 style={{ fontSize: 14, fontWeight: 600, color: C.white, lineHeight: 1.3 }}>{task.title}</h4>
+                        {task.subtitle && <p style={{ fontSize: 12, color: C.sage, marginTop: 2 }}>{task.subtitle}</p>}
                       </div>
                     </div>
-
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded text-rose-800 bg-rose-50 border border-rose-200 shrink-0">
-                      {task.badgeText || 'Action Blocked'}
-                    </span>
+                    <span className="badge badge-red" style={{ fontSize: 10, flexShrink: 0 }}>{task.badgeText || 'Blocked'}</span>
                   </div>
 
-                  {/* Clean Blocker Reason Box */}
                   {task.blockerDetails && (
-                    <div className="border border-slate-200 bg-slate-50/70 rounded-lg p-2.5 text-xs text-slate-700 space-y-1">
-                      <p className="leading-relaxed">
-                        {task.blockerDetails.reason}
-                      </p>
-                      <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono pt-1 border-t border-slate-200">
+                    <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '8px 12px', fontSize: 12, marginBottom: 10 }}>
+                      <p style={{ color: C.fern, lineHeight: 1.5, marginBottom: 6 }}>{task.blockerDetails.reason}</p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.sage, fontFamily: 'var(--font-mono)', paddingTop: 6, borderTop: '1px solid rgba(239,68,68,0.15)' }}>
                         <span>Attempts: {task.blockerDetails.attempts}</span>
                         <span>{task.blockerDetails.lastAttemptTime}</span>
                       </div>
                     </div>
                   )}
 
-                  {/* Standardized Action CTAs */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
+                  <div style={{ paddingTop: 10, borderTop: '1px solid var(--color-moss-shadow)' }}>
                     {task.category === 'chemist' && (
-                      <button
-                        onClick={() => setActiveChemistModalTask(task)}
-                        className="w-full rounded-lg text-xs font-medium px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-[0.98]"
-                      >
-                        <ShoppingBag className="w-3.5 h-3.5" />
-                        <span>Find Alternate Chemist</span>
+                      <button onClick={() => setActiveChemistModalTask(task)} className="btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 12, padding: '7px 14px', borderRadius: 8 }}>
+                        <ShoppingBag size={13} /> Find Alternate Chemist
                       </button>
                     )}
-
                     {task.category === 'checkin' && (
-                      <button
-                        onClick={() => {
-                          setActiveAuditTask(task);
-                        }}
-                        className="w-full rounded-lg text-xs font-medium px-3 py-2 bg-rose-700 hover:bg-rose-600 text-white flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer active:scale-[0.98]"
-                      >
-                        <PhoneForwarded className="w-3.5 h-3.5" />
-                        <span>Trigger Emergency Ping</span>
+                      <button onClick={() => setActiveAuditTask(task)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: 12, cursor: 'pointer' }}>
+                        <PhoneForwarded size={13} /> Trigger Emergency Ping
                       </button>
                     )}
                   </div>
                 </motion.div>
               ))}
             </AnimatePresence>
-
             {blockedTasks.length === 0 && (
-              <div className="text-center py-12 bg-white/60 rounded-xl border border-dashed border-slate-300 text-xs text-slate-400">
-                🎉 No active blockers!
+              <div style={{ textAlign: 'center', padding: '40px 20px', border: '1px dashed var(--color-moss-shadow)', borderRadius: 14, color: C.sage, fontSize: 13 }}>
+                🎉 No blockers
               </div>
             )}
           </div>
         </div>
 
       </div>
-
     </div>
   );
 };

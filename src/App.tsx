@@ -20,20 +20,51 @@ const DashboardContent: React.FC = () => {
   const { activeTab } = useApp();
 
   return (
-    <div className="min-h-screen text-slate-900 flex flex-col selection:bg-slate-900 selection:text-white">
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'var(--color-forest-depths)',
+        color: 'var(--color-pure-white)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Ambient botanical orb */}
+      <div
+        className="sprout-orb"
+        style={{
+          width: 600,
+          height: 600,
+          top: -200,
+          right: -150,
+          zIndex: 0,
+          pointerEvents: 'none',
+        }}
+      />
+
       {/* Global Navigation Bar */}
       <Navbar />
 
-      {/* Main Container Across All Tabs with Viewport Hardening */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main content */}
+      <main
+        style={{
+          flex: 1,
+          maxWidth: 1200,
+          width: '100%',
+          margin: '0 auto',
+          padding: '24px 24px 100px',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
         <AnimatePresence mode="wait">
           {activeTab === 'command_board' && (
             <motion.div
               key="tab1"
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.18 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
             >
               <Tab1CommandBoard />
             </motion.div>
@@ -42,10 +73,10 @@ const DashboardContent: React.FC = () => {
           {activeTab === 'document_intake' && (
             <motion.div
               key="tab2"
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.18 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
             >
               <Tab2DocumentIntake />
             </motion.div>
@@ -54,10 +85,10 @@ const DashboardContent: React.FC = () => {
           {activeTab === 'agent_trace' && (
             <motion.div
               key="tab3"
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.18 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
             >
               <Tab3AgentTrace />
             </motion.div>
@@ -65,13 +96,13 @@ const DashboardContent: React.FC = () => {
         </AnimatePresence>
       </main>
 
-      {/* Stage Demo Simulator (Fail-Safe Dock) */}
+      {/* Demo Simulator dock */}
       <DemoSimulatorBar />
 
-      {/* Toast Notifications System */}
+      {/* Toast notifications */}
       <ToastContainer />
 
-      {/* Modal Dialogs & Drawers */}
+      {/* Modals & Drawers */}
       <GuardrailsModal />
       <AlertsDrawer />
       <ParentProfileModal />
