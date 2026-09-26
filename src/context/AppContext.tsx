@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { playSound } from '../utils/audio';
+import { apiService } from '../services/api';
 import type {
   KanbanTask,
   ParentProfile,
@@ -118,6 +119,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedRxId, setSelectedRxId] = useState<string | null>('rx-1');
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Initial Backend Hydration (Optimistic & Offline-safe)
+  useEffect(() => {
+    let isMounted = true;
+    const hydrateBackend = async () => {
+      // 1. Try fetching active parent
+      const remoteParent = await apiService.getActiveParent();
+      if (remoteParent && isMounted) {
+        setActiveParentState(prev => ({
+          ...prev,
+          ...remoteParent,
+          vendors: { ...prev.vendors, ...remoteParent.vendors }
+        }));
+      }
+
+      // 2. Try fetching live telemetry logs
+      const remoteLogs = await apiService.getLogs(20);
+      if (remoteLogs && remoteLogs.length > 0 && isMounted) {
+        setEventLogs(prev => [...remoteLogs, ...prev]);
+      }
+    };
+
+    hydrateBackend();
+    return () => { isMounted = false; };
+  }, []);
 
   // Helper to sync prescriptionItems with a DocumentRecord
   const syncPrescriptionItemsFromDoc = (doc: DocumentRecord) => {
@@ -280,6 +306,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDocuments((prev) => [newDoc, ...prev]);
     setActiveDocument(newDoc);
 
+    // Async post to backend if live
+    apiService.postDocument(newDoc);
+
     addEventLog({
       agentSource: 'Guardrail Engine',
       eventType: 'DOCUMENT_OCR_INTAKE_PROCESSED',
@@ -382,6 +411,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     } catch {}
 
+    // Asynchronously call backend /api/tasks/:id/approve (failsafe/optimistic)
+    apiService.approveTask(taskId);
+
     const isChemist = task.category === 'chemist';
 
     setTasks((prev) =>
@@ -435,6 +467,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const task = tasks.find((t) => t.id === taskId);
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     playSound('ping');
+
+    // Asynchronously call backend /api/tasks/:id/reject (failsafe)
+    apiService.rejectTask(taskId);
     
     addToast({
       type: 'info',
