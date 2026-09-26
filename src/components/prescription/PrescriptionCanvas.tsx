@@ -8,9 +8,21 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const PrescriptionCanvas: React.FC = () => {
-  const { prescriptionItems, selectedRxId, setSelectedRxId, activeParent } = useApp();
+  const { prescriptionItems, selectedRxId, setSelectedRxId, activeParent, activeDocument } = useApp();
   const [hoveredRxId, setHoveredRxId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
+
+  const isBill = activeDocument.docType === 'ELECTRICITY_BILL';
+  const issuerTitle = activeDocument.issuer.title;
+  const issuerSubtitle = activeDocument.issuer.subtitle;
+  const issuerAddress = activeDocument.issuer.address;
+  const issuerReg = activeDocument.issuer.regOrConsumer;
+  const patientName = activeDocument.patientOrConsumerName || activeParent.name;
+  const consultDate = activeDocument.consultDate;
+  const vitalsSummary = activeDocument.vitalsOrSummary;
+
+  // Watermark text
+  const watermarkText = isBill ? 'SBPDCL PATNA' : issuerTitle.toUpperCase().split(',')[0].replace('DR. ', '') + ' CLINIC';
 
   return (
     <div className="space-y-3">
@@ -18,13 +30,15 @@ export const PrescriptionCanvas: React.FC = () => {
       <div className="flex items-center justify-between bg-slate-100 p-2.5 rounded-xl border border-slate-200 text-xs">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-bold text-slate-800">Prescription Scan Preview</span>
-          <span className="text-slate-600 font-mono text-[11px]">(rx_skverma_patna_2026.pdf)</span>
+          <span className="font-bold text-slate-800">
+            {isBill ? 'Utility Bill Preview' : 'Prescription Scan Preview'}
+          </span>
+          <span className="text-slate-600 font-mono text-[11px]">({activeDocument.fileName})</span>
         </div>
 
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-teal-800 bg-teal-100 px-2 py-0.5 rounded font-medium">
-            OCR Bounding Boxes: 4 Detected
+            OCR Bounding Boxes: {prescriptionItems.length} Detected
           </span>
           <button
             onClick={() => setZoomLevel(prev => prev === 1 ? 1.05 : 1)}
@@ -36,75 +50,75 @@ export const PrescriptionCanvas: React.FC = () => {
         </div>
       </div>
 
-      {/* Realistic Doctor Rx Pad */}
-      <div className="relative w-full bg-[#fcfbf7] border-2 border-slate-300 rounded-xl shadow-lg p-6 sm:p-8 overflow-hidden font-serif select-none transition-all duration-200"
+      {/* Realistic Doctor Rx Pad or Utility Bill Canvas */}
+      <div 
+        className="relative w-full bg-[#fcfbf7] border-2 border-slate-300 rounded-xl shadow-lg p-6 sm:p-8 overflow-hidden font-serif select-none transition-all duration-200"
         style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}
       >
         {/* Subtle Paper Texture & Watermark */}
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:16px_16px]" />
         
-        <div className="absolute right-10 top-24 opacity-5 pointer-events-none text-teal-900 font-sans font-black text-7xl rotate-[-25deg]">
-          VERMA CLINIC
+        <div className="absolute right-10 top-24 opacity-5 pointer-events-none text-teal-900 font-sans font-black text-6xl rotate-[-25deg]">
+          {watermarkText}
         </div>
 
-        {/* Doctor Header */}
+        {/* Doctor or Billing Header */}
         <div className="border-b-2 border-slate-800/80 pb-4 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xl font-bold text-slate-900 font-sans tracking-tight">
-                Dr. S. K. Verma
-              </span>
-              <span className="text-xs font-semibold text-slate-600 font-sans">
-                M.D. (Medicine), F.I.C.P.
+                {issuerTitle}
               </span>
             </div>
             <p className="text-xs text-slate-600 font-sans mt-0.5">
-              Consultant Physician & Cardiologist • Senior Ex-Consultant PMCH Patna
+              {issuerSubtitle}
             </p>
             <p className="text-[11px] text-slate-500 font-sans">
-              Regn No: <strong>BCMR / 2004 / 4891</strong> • Patna, Bihar
+              {isBill ? 'Consumer Mandate Ref:' : 'Regn No:'} <strong>{issuerReg}</strong> • {activeParent.city}
             </p>
           </div>
 
           <div className="text-right font-sans">
-            <span className="text-xs font-bold text-teal-800 block">VERMA HEART & DIABETES CARE</span>
-            <p className="text-[10px] text-slate-500">Exhibition Road Chauraha, Patna - 800001</p>
-            <p className="text-[10px] text-slate-500">Ph: +91 94311 22334 / 0612-230918</p>
+            <span className="text-xs font-bold text-teal-800 block uppercase">
+              {isBill ? 'GOVERNMENT OF BIHAR' : 'VERIFIED CLINICAL PRACTICE'}
+            </span>
+            <p className="text-[10px] text-slate-500">{issuerAddress}</p>
+            <p className="text-[10px] text-slate-500">Ph: {activeParent.phone} • Patna Support</p>
           </div>
         </div>
 
-        {/* Patient Details Row */}
+        {/* Patient / Consumer Details Row */}
         <div className="py-3 border-b border-slate-300 grid grid-cols-2 sm:grid-cols-4 gap-2 font-sans text-xs">
           <div>
-            <span className="text-slate-500 text-[10px]">Patient Name:</span>
-            <p className="font-bold text-slate-800">{activeParent.name}</p>
+            <span className="text-slate-500 text-[10px]">{isBill ? 'Consumer Name:' : 'Patient Name:'}</span>
+            <p className="font-bold text-slate-800">{patientName}</p>
           </div>
           <div>
-            <span className="text-slate-500 text-[10px]">Age / Gender:</span>
-            <p className="font-bold text-slate-800">{activeParent.age} Yrs / Male</p>
+            <span className="text-slate-500 text-[10px]">Age / Location:</span>
+            <p className="font-bold text-slate-800">{activeParent.age} Yrs • {activeParent.location.split(',')[0]}</p>
           </div>
           <div>
-            <span className="text-slate-500 text-[10px]">Date of Consult:</span>
-            <p className="font-bold text-slate-800">24-Sep-2026</p>
+            <span className="text-slate-500 text-[10px]">Date of Record:</span>
+            <p className="font-bold text-slate-800">{consultDate}</p>
           </div>
           <div>
-            <span className="text-slate-500 text-[10px]">BP / Fasting:</span>
-            <p className="font-bold text-teal-800">128/82 • 114 mg/dL</p>
+            <span className="text-slate-500 text-[10px]">{isBill ? 'Tariff & Units:' : 'BP / Vitals:'}</span>
+            <p className="font-bold text-teal-800">{vitalsSummary}</p>
           </div>
         </div>
 
-        {/* Rx Symbol */}
+        {/* Rx or Invoicing Symbol */}
         <div className="pt-4 pb-2 flex items-center justify-between">
           <span className="text-3xl font-serif font-black text-slate-900 tracking-tighter">
-            ℞
+            {isBill ? '₹' : '℞'}
           </span>
           <span className="text-[11px] text-slate-400 font-sans italic">
-            (Advised Regular Medication Schedule)
+            {isBill ? '(Verified BBPS Auto-Mandate Schedule)' : '(Advised Regular Medication Schedule)'}
           </span>
         </div>
 
-        {/* Prescription Lines with OCR Bounding Box Overlays */}
-        <div className="relative space-y-4 py-2 font-sans min-h-[300px]">
+        {/* Extracted Lines with OCR Bounding Box Overlays */}
+        <div className="relative space-y-4 py-2 font-sans min-h-[280px]">
           {prescriptionItems.map((item, idx) => {
             const isSelected = selectedRxId === item.id;
             const isHovered = hoveredRxId === item.id;
@@ -165,16 +179,16 @@ export const PrescriptionCanvas: React.FC = () => {
           })}
         </div>
 
-        {/* Doctor Signature & Stamp Area */}
+        {/* Doctor Signature or Official Stamp Area */}
         <div className="pt-8 mt-6 border-t border-slate-300 flex items-end justify-between font-sans">
           <div className="text-[10px] text-slate-400">
-            <p>Note: Take medicines after meals with plain water.</p>
-            <p>Next review after 30 days with Lipid & Sugar reports.</p>
+            <p>{isBill ? 'Note: Bill verified under Bihar Urban Domestic Power Policy.' : 'Note: Take medicines after meals with plain water.'}</p>
+            <p>{isBill ? 'Auto-debit processed on 15th via Setu BBPS gateway.' : 'Next review after 30 days with Lipid & Sugar reports.'}</p>
           </div>
 
           <div className="text-center">
             <div className="font-serif italic text-lg text-teal-950 font-bold -rotate-3 select-none">
-              Dr. S.K. Verma
+              {isBill ? 'SBPDCL Patna Desk' : issuerTitle.split(',')[0]}
             </div>
             <div className="w-32 h-0.5 bg-slate-400 mx-auto my-1" />
             <p className="text-[10px] font-bold text-slate-700 uppercase">Authorized Signature & Stamp</p>

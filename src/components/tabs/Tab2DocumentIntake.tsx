@@ -8,9 +8,9 @@ import {
   Clock, 
   ArrowRight, 
   ShieldCheck, 
-  Zap, 
-  Info,
-  ScanLine
+  ScanLine,
+  FileText,
+  Plus
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PrescriptionCanvas } from '../prescription/PrescriptionCanvas';
@@ -24,14 +24,17 @@ export const Tab2DocumentIntake: React.FC = () => {
     selectedRxId, 
     setSelectedRxId,
     activeParent,
-    addToast
+    documents,
+    activeDocument,
+    setActiveDocument,
+    uploadDocument
   } = useApp();
 
   const [isDragging, setIsDragging] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
 
-  const handleFrequencyChange = (id: string, newFreq: any) => {
+  const handleFrequencyChange = (id: string, newFreq: string) => {
     setPrescriptionItems(prev =>
       prev.map(item => (item.id === id ? { ...item, frequency: newFreq } : item))
     );
@@ -57,14 +60,10 @@ export const Tab2DocumentIntake: React.FC = () => {
         setTimeout(() => {
           setIsScanning(false);
           playSound('approval');
-          addToast({
-            type: 'success',
-            title: 'Prescription OCR Extracted',
-            message: `Parsed "${fileName}". 4 clinical entities extracted with 96.4% confidence.`
-          });
+          uploadDocument({ name: fileName });
         }, 300);
       }
-    }, 250);
+    }, 200);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,6 +96,45 @@ export const Tab2DocumentIntake: React.FC = () => {
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
           <span>Anti-Hallucination Safe Review</span>
         </div>
+      </div>
+
+      {/* Dynamic Document Pill Switcher */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider pl-1">
+            Active Grounded Docs:
+          </span>
+          {documents.map((doc) => {
+            const isActive = activeDocument.id === doc.id;
+            return (
+              <button
+                key={doc.id}
+                onClick={() => setActiveDocument(doc)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                  isActive
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>{doc.fileName}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                  isActive ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {doc.docType === 'PRESCRIPTION' ? 'Rx' : 'Bill'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={() => triggerScanAnimation(`rx_dr_jha_patna_${Date.now().toString().slice(-4)}.pdf`)}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 flex items-center gap-1 transition-all cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Simulate Upload</span>
+        </button>
       </div>
 
       {/* Split-Screen Layout: Left Side (Task 4.1) & Right Side (Task 4.2) */}
@@ -136,7 +174,7 @@ export const Tab2DocumentIntake: React.FC = () => {
                 Drop New Prescription or Lab Scan Here
               </h4>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Supports PDF, PNG, JPG scans (Dr. S.K. Verma sample loaded)
+                Supports PDF, PNG, JPG scans ({activeDocument.issuer.title} loaded)
               </p>
             </label>
           </div>
@@ -170,7 +208,7 @@ export const Tab2DocumentIntake: React.FC = () => {
             )}
           </AnimatePresence>
 
-          {/* Visual Realistic Doctor Prescription Canvas */}
+          {/* Visual Realistic Doctor Prescription / Document Canvas */}
           <PrescriptionCanvas />
         </div>
 
@@ -205,7 +243,7 @@ export const Tab2DocumentIntake: React.FC = () => {
                 </p>
               </div>
               <span className="text-xs font-semibold text-teal-800 bg-teal-100 px-2.5 py-0.5 rounded-full">
-                4 Items Extracted
+                {prescriptionItems.length} Items Extracted
               </span>
             </div>
 
@@ -252,9 +290,9 @@ export const Tab2DocumentIntake: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Category */}
+                        {/* Category Badge */}
                         <td className="px-3 py-2">
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                             {item.category}
                           </span>
                         </td>
@@ -264,34 +302,32 @@ export const Tab2DocumentIntake: React.FC = () => {
                           <select
                             value={item.frequency}
                             onChange={(e) => handleFrequencyChange(item.id, e.target.value)}
-                            className="text-[11px] bg-white border border-slate-200 rounded-md px-1.5 py-1 text-slate-800 focus:ring-1 focus:ring-teal-500 focus:outline-none cursor-pointer"
+                            className="bg-white border border-slate-300 rounded px-1.5 py-1 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-teal-500"
                           >
                             <option value="Once Daily (Morning)">Once Daily (Morning)</option>
                             <option value="Twice Daily (Morning & Night)">Twice Daily (Morning & Night)</option>
                             <option value="At Bedtime (Night)">At Bedtime (Night)</option>
-                            <option value="As Needed">As Needed (SOS)</option>
+                            <option value="As Needed (SOS)">As Needed (SOS)</option>
                           </select>
                         </td>
 
-                        {/* Next Refill Date / Trigger Slot */}
-                        <td className="px-3 py-2 font-mono text-[11px] text-slate-700">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-teal-600 shrink-0" />
-                            <span className="truncate">{item.nextTriggerTime}</span>
+                        {/* Next Refill Trigger Time */}
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1 text-slate-600 font-mono text-[11px]">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>{item.nextTriggerTime}</span>
                           </div>
                         </td>
 
-                        {/* Confidence Score on Far Right (Guaranteed fully visible) */}
+                        {/* Confidence Metric */}
                         <td className="px-3 py-2 text-right">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold inline-flex items-center gap-1 shrink-0 ${
-                              isHighConfidence
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}
-                          >
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                            isHighConfidence
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          }`}>
                             <Sparkles className="w-2.5 h-2.5" />
-                            {(item.confidence * 100).toFixed(0)}% High
+                            {(item.confidence * 100).toFixed(0)}%
                           </span>
                         </td>
                       </tr>
@@ -301,65 +337,30 @@ export const Tab2DocumentIntake: React.FC = () => {
               </table>
             </div>
 
-            {/* Selected Entity Detailed Inspector */}
-            {selectedRxId && (
-              <div className="p-3.5 bg-slate-50 border-t border-slate-200 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-700 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                    <Info className="w-3.5 h-3.5 text-teal-600" />
-                    Source Grounding & Clinical Rule
-                  </span>
-                  <span className="text-slate-500 font-mono text-[10px]">
-                    Grounding ID: {selectedRxId}
-                  </span>
-                </div>
-                {(() => {
-                  const selected = prescriptionItems.find(i => i.id === selectedRxId);
-                  if (!selected) return null;
-                  return (
-                    <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
-                      <p className="text-slate-800 font-semibold">
-                        {selected.medicineName} ({selected.dosage})
-                      </p>
-                      <p className="text-slate-600 text-[11px]">
-                        <strong>Clinical Instruction:</strong> {selected.instruction}
-                      </p>
-                      <p className="text-teal-700 text-[10px] font-mono">
-                        Mapped to IVR Prompt: &ldquo;नमस्ते बाबूजी, क्या आपने सुबह की {selected.medicineName} ले ली?&rdquo;
-                      </p>
-                    </div>
-                  );
-                })()}
+            {/* Verification Footer & CTA */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>
+                  All {prescriptionItems.length} items grounded to <strong>{activeDocument.issuer.title}</strong>
+                </span>
               </div>
-            )}
-          </div>
 
-          {/* Sticky CTA Action Card */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-teal-600 shrink-0" />
-              <div>
-                <h4 className="text-xs font-semibold text-slate-900">Ready to Activate Schedule</h4>
-                <p className="text-[11px] text-slate-500">
-                  4 verified medicines will sync directly to Sarvam Voice AI and Chemist Dispatch Queue.
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={approvePrescriptionSchedule}
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <span>Approve & Activate Schedule</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            <button
-              onClick={approvePrescriptionSchedule}
-              className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-xs active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-            >
-              <Zap className="w-4 h-4 text-teal-300" />
-              <span>Approve & Activate Schedule</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
           </div>
 
         </div>
 
       </div>
-
     </div>
   );
 };

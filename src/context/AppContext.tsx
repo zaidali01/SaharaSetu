@@ -5,6 +5,7 @@ import type {
   KanbanTask,
   ParentProfile,
   PrescriptionItem,
+  DocumentRecord,
   AgentNode,
   EventLogItem,
   CriticalFlag
@@ -12,10 +13,13 @@ import type {
 import {
   INITIAL_PARENTS,
   INITIAL_TASKS,
+  INITIAL_DOCUMENTS,
   PRESCRIPTION_OCR_ITEMS,
   AGENT_PIPELINE_NODES,
   INITIAL_EVENT_LOGS,
-  INITIAL_CRITICAL_FLAGS
+  INITIAL_CRITICAL_FLAGS,
+  getTasksForParent,
+  getAgentNodesForParent
 } from '../data/mockData';
 
 export type ActiveTab = 'command_board' | 'document_intake' | 'agent_trace';
@@ -34,6 +38,11 @@ interface AppContextType {
   parents: ParentProfile[];
   activeParent: ParentProfile;
   setActiveParent: (parent: ParentProfile) => void;
+  documents: DocumentRecord[];
+  setDocuments: React.Dispatch<React.SetStateAction<DocumentRecord[]>>;
+  activeDocument: DocumentRecord;
+  setActiveDocument: (doc: DocumentRecord) => void;
+  uploadDocument: (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE' }) => void;
   tasks: KanbanTask[];
   setTasks: React.Dispatch<React.SetStateAction<KanbanTask[]>>;
   prescriptionItems: PrescriptionItem[];
@@ -89,10 +98,12 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('command_board');
   const [parents] = useState<ParentProfile[]>(INITIAL_PARENTS);
-  const [activeParent, setActiveParent] = useState<ParentProfile>(INITIAL_PARENTS[0]);
+  const [activeParent, setActiveParentState] = useState<ParentProfile>(INITIAL_PARENTS[0]);
+  const [documents, setDocuments] = useState<DocumentRecord[]>(INITIAL_DOCUMENTS);
+  const [activeDocument, setActiveDocumentState] = useState<DocumentRecord>(INITIAL_DOCUMENTS[0]);
   const [tasks, setTasks] = useState<KanbanTask[]>(INITIAL_TASKS);
   const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>(PRESCRIPTION_OCR_ITEMS);
-  const [agentNodes] = useState<AgentNode[]>(AGENT_PIPELINE_NODES);
+  const [agentNodes, setAgentNodes] = useState<AgentNode[]>(AGENT_PIPELINE_NODES);
   const [eventLogs, setEventLogs] = useState<EventLogItem[]>(INITIAL_EVENT_LOGS);
   const [criticalFlags, setCriticalFlags] = useState<CriticalFlag[]>(INITIAL_CRITICAL_FLAGS);
   
@@ -107,6 +118,187 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedRxId, setSelectedRxId] = useState<string | null>('rx-1');
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Helper to sync prescriptionItems with a DocumentRecord
+  const syncPrescriptionItemsFromDoc = (doc: DocumentRecord) => {
+    const items: PrescriptionItem[] = doc.extractedItems.map((item) => ({
+      id: item.id,
+      medicineName: item.name,
+      dosage: item.dosage || '5 mg',
+      frequency: item.frequency,
+      frequencyCode: item.frequencyCode || 'OD',
+      instruction: item.instruction || 'Take as directed',
+      nextTriggerTime: item.triggerSlot,
+      confidence: item.confidenceScore,
+      sourceBox: item.sourceBox || { top: 36, left: 12, width: 76, height: 7 },
+      status: item.status || 'verified',
+      category: item.category,
+      rawOcrText: item.rawOcrText || `${item.name} ${item.dosage || ''} ${item.frequencyCode || ''}`
+    }));
+    setPrescriptionItems(items);
+    if (items.length > 0) {
+      setSelectedRxId(items[0].id);
+    }
+  };
+
+  // Set active document & sync items
+  const setActiveDocument = (doc: DocumentRecord) => {
+    setActiveDocumentState(doc);
+    syncPrescriptionItemsFromDoc(doc);
+  };
+
+  // Switch parent dynamically & update all downstream reactive states
+  const setActiveParent = (parent: ParentProfile) => {
+    setActiveParentState(parent);
+    
+    // 1. Find or fallback to parent's document
+    const parentDoc = documents.find((d) => d.parentId === parent.id) || documents[0];
+    if (parentDoc) {
+      setActiveDocumentState(parentDoc);
+      syncPrescriptionItemsFromDoc(parentDoc);
+    }
+
+    // 2. Regenerate reactive tasks tailored to parent's vendors and location
+    const newParentTasks = getTasksForParent(parent);
+    setTasks(newParentTasks);
+
+    // 3. Update agent pipeline nodes for this parent's phone and localization
+    setAgentNodes(getAgentNodesForParent(parent));
+
+    // 4. Log event in telemetry
+    addEventLog({
+      agentSource: 'Postgres State Planner',
+      eventType: 'PARENT_PROFILE_CONTEXT_SWITCHED',
+      severity: 'info',
+      details: `Active monitoring context switched to ${parent.name} (${parent.city}, ${parent.preferredLanguage}). Vendor routing and documents synced.`,
+      payload: {
+        parentId: parent.id,
+        parentName: parent.name,
+        city: parent.city,
+        chemist: parent.vendors.chemist.name,
+        lpgProvider: parent.vendors.lpg.provider
+      }
+    });
+
+    addToast({
+      type: 'info',
+      title: `Switched to ${parent.name}`,
+      message: `Updated profile context, documents, and local vendor bindings for ${parent.city}.`
+    });
+  };
+
+  // Dynamic upload document handler
+  const uploadDocument = (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE' }) => {
+    const fileName = file.name;
+    const isBill = fileName.toLowerCase().includes('bill') || fileName.toLowerCase().includes('sbpdcl');
+    
+    const newDocId = 'doc-' + Date.now();
+    const newDoc: DocumentRecord = {
+      id: newDocId,
+      parentId: activeParent.id,
+      fileName: fileName,
+      docType: isBill ? 'ELECTRICITY_BILL' : 'PRESCRIPTION',
+      issuer: isBill
+        ? {
+            title: 'SBPDCL Patna Urban Desk',
+            subtitle: 'South Bihar Power Distribution Company Ltd',
+            address: 'Vidyut Bhawan, Bailey Road, Patna - 800021',
+            regOrConsumer: activeParent.vendors.electricity.consumerId
+          }
+        : {
+            title: 'Dr. Rajiv N. Jha, M.D.',
+            subtitle: 'Senior Consultant Physician & Geriatric Specialist',
+            address: 'Fraser Road Chauraha, Patna - 800001',
+            regOrConsumer: 'BCMR / 2015 / 8831'
+          },
+      patientOrConsumerName: activeParent.name,
+      consultDate: 'Today',
+      vitalsOrSummary: `${activeParent.vitals.bloodPressure} • Fasting: ${activeParent.vitals.bloodSugarFasting}`,
+      extractedItems: isBill
+        ? [
+            {
+              id: `item-${Date.now()}-1`,
+              name: 'Electricity Consumption (Cycle Total)',
+              dosage: 'LT Domestic',
+              category: 'Utility',
+              frequency: 'Once Daily (Morning)',
+              frequencyCode: 'OD',
+              instruction: 'Domestic slab with government power subsidy',
+              triggerSlot: '18th of Every Month',
+              confidenceScore: 0.99,
+              rawOcrText: 'Net Payable Amount: ₹1,420.00',
+              sourceBox: { top: 38, left: 12, width: 76, height: 7 },
+              status: 'verified'
+            }
+          ]
+        : [
+            {
+              id: `item-${Date.now()}-1`,
+              name: 'Tab Cilnidipine',
+              dosage: '10 mg',
+              category: 'Cardio',
+              frequency: 'Once Daily (Morning)',
+              frequencyCode: 'OD',
+              instruction: '1 tablet once daily morning after breakfast',
+              triggerSlot: '08:00 AM Tomorrow',
+              confidenceScore: 0.98,
+              rawOcrText: 'Tab. Cilnidipine 10mg OD (Post Breakfast)',
+              sourceBox: { top: 36, left: 12, width: 76, height: 7 },
+              status: 'verified'
+            },
+            {
+              id: `item-${Date.now()}-2`,
+              name: 'Tab Metformin SR',
+              dosage: '500 mg',
+              category: 'Diabetes',
+              frequency: 'Twice Daily (Morning & Night)',
+              frequencyCode: 'BD',
+              instruction: '1 tablet twice daily with principal meals',
+              triggerSlot: '08:30 AM & 08:30 PM',
+              confidenceScore: 0.96,
+              rawOcrText: 'Tab. Metformin 500mg SR BD',
+              sourceBox: { top: 46, left: 12, width: 76, height: 7 },
+              status: 'verified'
+            },
+            {
+              id: `item-${Date.now()}-3`,
+              name: 'Tab Neurobion Forte',
+              dosage: '1 B-Complex Tab',
+              category: 'Supplement',
+              frequency: 'Once Daily (Morning)',
+              frequencyCode: 'OD',
+              instruction: '1 tablet daily after lunch for nerve support',
+              triggerSlot: '01:30 PM Tomorrow',
+              confidenceScore: 0.94,
+              rawOcrText: 'Tab. Neurobion Forte OD',
+              sourceBox: { top: 56, left: 12, width: 76, height: 7 },
+              status: 'verified'
+            }
+          ]
+    };
+
+    setDocuments((prev) => [newDoc, ...prev]);
+    setActiveDocument(newDoc);
+
+    addEventLog({
+      agentSource: 'Guardrail Engine',
+      eventType: 'DOCUMENT_OCR_INTAKE_PROCESSED',
+      severity: 'success',
+      details: `Parsed uploaded document "${fileName}". Extracted ${newDoc.extractedItems.length} entities with 97.2% confidence for ${activeParent.name}.`,
+      payload: {
+        fileName,
+        patient: activeParent.name,
+        docType: newDoc.docType,
+        extractedCount: newDoc.extractedItems.length
+      }
+    });
+
+    addToast({
+      type: 'success',
+      title: 'New Document Processed',
+      message: `Extracted ${newDoc.extractedItems.length} entities from "${fileName}". Schedule table updated.`
+    });
+  };
 
   // Global Keyboard Shortcuts (1 -> Command Board, 2 -> Document Review, 3 -> Agent Pipeline)
   useEffect(() => {
@@ -180,21 +372,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
 
-    // Play pleasant chime
     playSound('approval');
 
-    // Trigger subtle confetti
     try {
       confetti({
         particleCount: 50,
         spread: 60,
         origin: { y: 0.6 }
       });
-    } catch {
-      // Fallback
-    }
+    } catch {}
 
-    const isSharmaChemist = taskId === 'task-3';
+    const isChemist = task.category === 'chemist';
 
     setTasks((prev) =>
       prev.map((t) =>
@@ -202,15 +390,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? {
               ...t,
               column: 'done',
-              title: isSharmaChemist
-                ? 'Chemist Order Dispatched — Sharma Medical (+91 98350 XXXXX)'
+              title: isChemist
+                ? `Chemist Order Dispatched — ${t.vendor || activeParent.vendors.chemist.name}`
                 : t.title,
-              subtitle: isSharmaChemist
-                ? 'Metformin 500mg + Amlodipine 5mg dispatched via WhatsApp Business'
+              subtitle: isChemist
+                ? 'Medicines dispatched via WhatsApp Business API'
                 : t.subtitle,
-              badgeText: isSharmaChemist ? 'Dispatched via WhatsApp' : 'Approved & Dispatched',
-              verificationMethod: isSharmaChemist
-                ? 'Authorized ₹340.00 via WhatsApp Cloud API'
+              badgeText: isChemist ? 'Dispatched via WhatsApp' : 'Approved & Dispatched',
+              verificationMethod: isChemist
+                ? `Authorized ₹${t.amount?.toFixed(2) || '340.00'} via WhatsApp Cloud API`
                 : t.amount
                 ? `Authorized ₹${t.amount.toFixed(2)} via Child Sign-off`
                 : 'Approved by Child Dashboard'
@@ -223,8 +411,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       agentSource: 'WhatsApp/UPI Action Agent',
       eventType: 'TRANSACTION_APPROVED_BY_CHILD',
       severity: 'success',
-      details: isSharmaChemist
-        ? 'Child authorized Sharma Medical order. Dispatched via WhatsApp API (+91 94302 55441).'
+      details: isChemist
+        ? `Child authorized order for ${task.vendor || activeParent.vendors.chemist.name}. Dispatched via WhatsApp API (${activeParent.vendors.chemist.phone}).`
         : `Child authorized action: "${task.title}" (₹${task.amount || 0}). Order dispatched to vendor.`,
       payload: {
         taskId: task.id,
@@ -237,8 +425,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast({
       type: 'success',
       title: 'Order & Payment Dispatched via WhatsApp API',
-      message: isSharmaChemist
-        ? 'Chemist order for Sharma Medical Store has been dispatched via WhatsApp.'
+      message: isChemist
+        ? `Chemist order for ${task.vendor || activeParent.vendors.chemist.name} has been dispatched via WhatsApp.`
         : `"${task.title}" has been authorized and moved to Completed.`
     });
   };
@@ -272,7 +460,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               column: 'needs_approval',
               vendor: alternateChemist,
               title: `Rerouted Refill — ${alternateChemist}`,
-              subtitle: 'Vitamin D3 Chewable (Monthly Pack) re-routed for immediate dispatch',
+              subtitle: 'Medication re-routed for immediate local dispatch',
               badgeText: 'Rerouted (Pending Sign-off)',
               blockerDetails: undefined
             }
@@ -323,7 +511,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         financialChecked: true,
         emergencyScreened: true
       },
-      transcript: index === 0 ? INITIAL_TASKS[0].transcript : undefined
+      transcript: index === 0 ? tasks[0]?.transcript : undefined
     }));
 
     setTasks((prev) => {
@@ -338,18 +526,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       agentSource: 'Guardrail Engine',
       eventType: 'PRESCRIPTION_SCHEDULE_ACTIVATED',
       severity: 'success',
-      details: `Child verified and activated 4 medicines extracted from Dr. S.K. Verma prescription. IVR schedule synced.`,
+      details: `Child verified and activated ${prescriptionItems.length} items extracted from ${activeDocument.issuer.title} (${activeDocument.fileName}). IVR schedule synced for ${activeParent.name}.`,
       payload: {
         totalMedicines: prescriptionItems.length,
-        doctor: 'Dr. S.K. Verma, MD Patna',
-        approvedBy: 'Yuvraj Atri (Son)'
+        doctor: activeDocument.issuer.title,
+        patient: activeParent.name,
+        approvedBy: 'Child Dashboard'
       }
     });
 
     addToast({
       type: 'success',
-      title: 'Prescription Schedule Activated!',
-      message: '4 medicines verified. IVR call agent & reminders are now active.'
+      title: 'Schedule Activated!',
+      message: `${prescriptionItems.length} entities verified. IVR call agent & reminders are active for ${activeParent.name.split(' ')[0]}.`
     });
 
     setActiveTab('command_board');
@@ -366,15 +555,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     } catch {}
 
+    const isMother = activeParent.relation.toLowerCase().includes('mother');
+
     const newTask: KanbanTask = {
       id: 'sim-call-' + Date.now(),
-      title: 'Afternoon Sugar Check & Glimepiride',
+      title: isMother ? 'Afternoon Sugar Check & Thyroid Followup' : 'Afternoon Sugar Check & Glimepiride',
       subtitle: 'Post-lunch vitals check & medicine reminder',
       column: 'done',
       category: 'medication',
       time: '01:45 PM',
       date: 'Just Now',
-      verificationMethod: 'Verified via Hindi voice call (0:42)',
+      verificationMethod: `Verified via ${activeParent.preferredLanguage.split('/')[0].trim()} voice call (0:42)`,
       badgeText: 'Live Voice Verified',
       guardrailStatus: {
         dosageVerified: true,
@@ -386,15 +577,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         duration: '0:42',
         timestamp: 'Just Now (Simulated)',
         audioSimulatedTime: 42,
-        originalLang: 'Hindi / Bhojpuri',
-        originalText: 'हाँ बेटा, दोपहर का खाना खा लिया है और दवाई भी ले ली है। शुगर 138 आया है।',
-        translatedText: 'Yes son, had afternoon lunch and took the tablet too. Sugar reading is 138 mg/dL.',
+        originalLang: activeParent.preferredLanguage,
+        originalText: isMother 
+          ? 'हाँ बेटा, दोपहर के भोजन के बाद आराम कर रहे हैं और दवाई समय पर ले ली है।'
+          : 'हाँ बेटा, दोपहर का खाना खा लिया है और दवाई भी ले ली है। शुगर 138 आया है।',
+        translatedText: isMother
+          ? 'Yes child, resting after afternoon lunch and took the medicines on time.'
+          : 'Yes son, had afternoon lunch and took the tablet too. Sugar reading is 138 mg/dL.',
         confidence: 0.99,
         sentiment: 'Positive',
         caller: 'Sahay AI Voice Agent (Sarvam AI)',
         receiver: activeParent.name + ` (${activeParent.phone})`,
         sarvamModel: 'Sarvam Saarathi-v2 (Indic STT)',
-        keywordsDetected: ['खाना खा लिया (Had food)', 'दवाई ले ली (Took medicine)', 'शुगर 138 (Sugar reading)']
+        keywordsDetected: ['खाना खा लिया (Had food)', 'दवाई ले ली (Took medicine)', 'सब ठीक है (All good)']
       }
     };
 
@@ -404,7 +599,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       agentSource: 'Sarvam Caller Agent',
       eventType: 'SIMULATED_VOICE_CALL_SUCCESS',
       severity: 'success',
-      details: `Call completed with ${activeParent.name} (42s). Vitals & medication intake confirmed in Hindi.`,
+      details: `Call completed with ${activeParent.name} (42s). Vitals & medication intake confirmed in ${activeParent.preferredLanguage}.`,
       payload: {
         parent: activeParent.name,
         duration: '0:42',
@@ -416,7 +611,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast({
       type: 'success',
       title: 'Morning Call Completed',
-      message: `Call with ${activeParent.name} completed (0:42). Medication confirmed in Hindi.`
+      message: `Call with ${activeParent.name} completed (0:42). Medication confirmed in ${activeParent.preferredLanguage.split('/')[0]}.`
     });
   };
 
@@ -425,8 +620,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const missedFlag: Omit<CriticalFlag, 'id' | 'timestamp'> = {
       type: 'missed_call',
       severity: 'high',
-      title: `Missed Check-in Call with ${activeParent.name}`,
-      description: `Voice AI attempted calling ${activeParent.phone} twice. Both attempts timed out after 45s ringing.`,
+      title: `Missed 2 calls with ${activeParent.name}`,
+      description: `Voice AI attempted calling ${activeParent.phone} at ${activeParent.address}. Both attempts timed out after 45s ringing.`,
       actionLabel: 'Direct Call Parent',
       resolved: false
     };
@@ -459,7 +654,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'distress-sim-' + Date.now(),
       type: 'distress_keyword',
       severity: 'critical',
-      title: '🚨 Parent reported dizziness ("Chakkar aa raha hai")',
+      title: `🚨 ${activeParent.name} reported dizziness ("Chakkar aa raha hai")`,
       description: `${activeParent.name} mentioned feeling dizzy at ${activeParent.address}. Sarvam ASR triggered instant emergency safeguard.`,
       timestamp: 'Just now',
       actionLabel: 'Emergency Protocol',
@@ -474,7 +669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       agentSource: 'Guardrail Engine',
       eventType: 'CRITICAL_DISTRESS_KEYWORD_DETECTED',
       severity: 'critical',
-      details: `EMERGENCY ABORT: Keyword "चक्कर" (dizziness) detected in voice stream. Dispatched emergency push to son.`,
+      details: `EMERGENCY ABORT: Keyword "चक्कर" (dizziness) detected in voice stream. Dispatched emergency push to family contacts.`,
       payload: {
         keyword: 'चक्कर (Dizziness)',
         parent: activeParent.name,
@@ -499,6 +694,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         parents,
         activeParent,
         setActiveParent,
+        documents,
+        setDocuments,
+        activeDocument,
+        setActiveDocument,
+        uploadDocument,
         tasks,
         setTasks,
         prescriptionItems,

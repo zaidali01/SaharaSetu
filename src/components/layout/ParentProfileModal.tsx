@@ -5,12 +5,14 @@ import {
   MapPin, 
   Languages, 
   Activity, 
-  Store 
+  Store,
+  Zap,
+  Flame
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export const ParentProfileModal: React.FC = () => {
-  const { isParentProfileOpen, setIsParentProfileOpen, activeParent, setActiveParent, parents, addToast } = useApp();
+  const { isParentProfileOpen, setIsParentProfileOpen, activeParent, setActiveParent, parents } = useApp();
 
   if (!isParentProfileOpen) return null;
 
@@ -33,7 +35,7 @@ export const ParentProfileModal: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-semibold">{activeParent.name}</h3>
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                    Age {activeParent.age} • {activeParent.relationship}
+                    Age {activeParent.age} • {activeParent.relation}
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
@@ -62,21 +64,14 @@ export const ParentProfileModal: React.FC = () => {
                   <button
                     key={parent.id}
                     type="button"
-                    onClick={() => {
-                      setActiveParent(parent);
-                      addToast({
-                        type: 'info',
-                        title: `Switched to ${parent.name}`,
-                        message: `Dashboard context updated to ${parent.address}, ${parent.city}.`
-                      });
-                    }}
+                    onClick={() => setActiveParent(parent)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       activeParent.id === parent.id
                         ? 'bg-slate-900 text-white shadow-xs'
                         : 'bg-white text-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    {parent.name} ({parent.city.split(',')[0]})
+                    {parent.name} ({parent.location.split(',')[0]})
                   </button>
                 ))}
               </div>
@@ -119,12 +114,53 @@ export const ParentProfileModal: React.FC = () => {
               <p className="text-slate-600">
                 Primary IVR Dialect: <strong>{activeParent.preferredLanguage}</strong> with native colloquial fluency in <strong>{activeParent.secondaryLanguage}</strong>.
               </p>
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1 flex-wrap">
                 {activeParent.dialects.map((d, i) => (
                   <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-800 text-[11px] font-semibold rounded border border-indigo-200">
                     {d} Acoustic Model v2
                   </span>
                 ))}
+              </div>
+            </div>
+
+            {/* Local Vendor Bindings */}
+            <div className="space-y-2">
+              <span className="font-semibold text-slate-900 uppercase tracking-wider text-[11px]">
+                Grounded Local Vendor Registry
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Chemist */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                  <div className="flex items-center gap-1.5 text-teal-700 font-semibold">
+                    <Store className="w-3.5 h-3.5" />
+                    <span>Pharmacy</span>
+                  </div>
+                  <p className="font-medium text-slate-900">{activeParent.vendors.chemist.name}</p>
+                  <p className="text-slate-500 text-[11px]">{activeParent.vendors.chemist.area}</p>
+                  <p className="text-slate-600 font-mono text-[10px]">{activeParent.vendors.chemist.phone}</p>
+                </div>
+
+                {/* LPG */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                  <div className="flex items-center gap-1.5 text-amber-700 font-semibold">
+                    <Flame className="w-3.5 h-3.5" />
+                    <span>LPG Gas</span>
+                  </div>
+                  <p className="font-medium text-slate-900">{activeParent.vendors.lpg.provider}</p>
+                  <p className="text-slate-500 text-[11px]">{activeParent.vendors.lpg.agency}</p>
+                  <p className="text-slate-600 font-mono text-[10px]">Ref: {activeParent.vendors.lpg.consumerNo}</p>
+                </div>
+
+                {/* Electricity */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                  <div className="flex items-center gap-1.5 text-indigo-700 font-semibold">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Electricity (BBPS)</span>
+                  </div>
+                  <p className="font-medium text-slate-900">{activeParent.vendors.electricity.provider}</p>
+                  <p className="text-slate-500 text-[11px]">Auto-Mandate active</p>
+                  <p className="text-slate-600 font-mono text-[10px]">ID: {activeParent.vendors.electricity.consumerId}</p>
+                </div>
               </div>
             </div>
 
@@ -149,21 +185,6 @@ export const ParentProfileModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Designated Local Pharmacy */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-900 flex items-center gap-1.5">
-                  <Store className="w-4 h-4 text-teal-600" />
-                  Designated Local Chemist Partner
-                </span>
-                <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
-                  Direct WhatsApp Integration Active
-                </span>
-              </div>
-              <p className="font-medium text-slate-800">{activeParent.preferredPharmacy.name}</p>
-              <p className="text-slate-500">{activeParent.preferredPharmacy.address}</p>
-              <p className="text-slate-600 font-mono text-[11px]">Contact: {activeParent.preferredPharmacy.contactPerson} ({activeParent.preferredPharmacy.phone})</p>
-            </div>
           </div>
 
           {/* Footer */}

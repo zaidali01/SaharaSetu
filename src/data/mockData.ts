@@ -66,12 +66,49 @@ export interface KanbanTask {
   };
 }
 
+export interface ExtractedItem {
+  id: string;
+  name: string;
+  dosage?: string;
+  category: string;
+  frequency: string;
+  frequencyCode?: 'OD' | 'BD' | 'TDS' | 'HS' | 'SOS' | string;
+  instruction?: string;
+  triggerSlot: string;
+  confidenceScore: number;
+  rawOcrText?: string;
+  sourceBox?: {
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  };
+  status?: 'verified' | 'needs_review' | 'active';
+}
+
+export interface DocumentRecord {
+  id: string;
+  parentId: string;
+  fileName: string;
+  docType: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE';
+  issuer: {
+    title: string;       // e.g. "Dr. S. K. Verma, M.D." or "SBPDCL Billing Desk"
+    subtitle: string;    // e.g. "Consultant Physician & Cardiologist"
+    address: string;     // e.g. "Exhibition Road Chauraha, Patna"
+    regOrConsumer: string;
+  };
+  patientOrConsumerName: string;
+  consultDate: string;
+  vitalsOrSummary: string; // e.g. "BP: 128/82, Fasting: 114 mg/dL"
+  extractedItems: ExtractedItem[];
+}
+
 export interface PrescriptionItem {
   id: string;
   medicineName: string;
   dosage: string;
-  frequency: 'Once Daily (Morning)' | 'Twice Daily (Morning & Night)' | 'At Bedtime (Night)' | 'As Needed';
-  frequencyCode: 'OD' | 'BD' | 'TDS' | 'HS' | 'SOS';
+  frequency: 'Once Daily (Morning)' | 'Twice Daily (Morning & Night)' | 'At Bedtime (Night)' | 'As Needed' | string;
+  frequencyCode: 'OD' | 'BD' | 'TDS' | 'HS' | 'SOS' | string;
   instruction: string;
   nextTriggerTime: string;
   confidence: number;
@@ -82,7 +119,7 @@ export interface PrescriptionItem {
     height: number;
   };
   status: 'verified' | 'needs_review' | 'active';
-  category: 'Cardio' | 'Diabetes' | 'Lipid' | 'Supplement';
+  category: 'Cardio' | 'Diabetes' | 'Lipid' | 'Supplement' | 'Thyroid' | string;
   rawOcrText: string;
 }
 
@@ -125,15 +162,23 @@ export interface CriticalFlag {
 export interface ParentProfile {
   id: string;
   name: string;
-  relationship: string;
+  relation: string;
+  relationship?: string; // backwards compatibility alias
   age: number;
+  location: string;
   address: string;
   city: string;
   pincode: string;
   phone: string;
+  language: string;
   preferredLanguage: string;
   secondaryLanguage: string;
   dialects: string[];
+  vendors: {
+    chemist: { name: string; phone: string; area: string; contactPerson?: string };
+    lpg: { provider: string; agency: string; consumerNo: string };
+    electricity: { provider: string; consumerId: string };
+  };
   vitals: {
     bloodPressure: string;
     bloodSugarFasting: string;
@@ -162,15 +207,35 @@ export const INITIAL_PARENTS: ParentProfile[] = [
   {
     id: 'parent-1',
     name: 'Ramprasad Atri',
+    relation: 'Father',
     relationship: 'Father',
     age: 74,
+    location: 'Kankarbagh, Patna',
     address: 'House #42, Road No. 4, Kankarbagh',
     city: 'Patna, Bihar',
     pincode: '800020',
     phone: '+91 94310 88219',
+    language: 'Hindi / Bhojpuri',
     preferredLanguage: 'Hindi / Bhojpuri',
     secondaryLanguage: 'Bhojpuri (Magahi dialect)',
     dialects: ['Bhojpuri', 'Hindi'],
+    vendors: {
+      chemist: { 
+        name: 'Sharma Medical Store', 
+        phone: '+91 94302 55441', 
+        area: 'Kankarbagh Main Road',
+        contactPerson: 'Mukesh Sharma (Proprietor)'
+      },
+      lpg: { 
+        provider: 'Indian Oil Corporation (Indane)', 
+        agency: 'Patliputra Indane Gas Agency', 
+        consumerNo: 'IND-8831920' 
+      },
+      electricity: { 
+        provider: 'SBPDCL Patna Urban', 
+        consumerId: 'CA-1004892188' 
+      }
+    },
     vitals: {
       bloodPressure: '128/82 mmHg',
       bloodSugarFasting: '114 mg/dL',
@@ -192,15 +257,35 @@ export const INITIAL_PARENTS: ParentProfile[] = [
   {
     id: 'parent-2',
     name: 'Shanti Devi',
+    relation: 'Mother',
     relationship: 'Mother',
     age: 71,
+    location: 'Boring Road, Patna',
     address: 'Flat 302, Gangotri Enclave, Boring Road',
     city: 'Patna, Bihar',
     pincode: '800001',
     phone: '+91 94312 99450',
+    language: 'Hindi / Maithili',
     preferredLanguage: 'Hindi / Maithili',
     secondaryLanguage: 'Hindi',
     dialects: ['Maithili', 'Hindi'],
+    vendors: {
+      chemist: { 
+        name: 'Patliputra Pharma', 
+        phone: '+91 98351 44332', 
+        area: 'Boring Road Chauraha',
+        contactPerson: 'Sanjay Gupta'
+      },
+      lpg: { 
+        provider: 'HP Gas Corporation', 
+        agency: 'Gangotri HP Gas Agency', 
+        consumerNo: 'HP-4491028' 
+      },
+      electricity: { 
+        provider: 'SBPDCL Patna Central', 
+        consumerId: 'CA-9021884012' 
+      }
+    },
     vitals: {
       bloodPressure: '122/78 mmHg',
       bloodSugarFasting: '108 mg/dL',
@@ -217,285 +302,501 @@ export const INITIAL_PARENTS: ParentProfile[] = [
       address: 'Boring Road Chauraha, Patna',
       contactPerson: 'Sanjay Gupta'
     }
+  },
+  {
+    id: 'parent-3',
+    name: 'Prof. B. K. Jha',
+    relation: 'Uncle',
+    relationship: 'Uncle (Senior Citizen)',
+    age: 78,
+    location: 'Rajendra Nagar, Patna',
+    address: 'Quarter 14-B, Road No. 8, Rajendra Nagar',
+    city: 'Patna, Bihar',
+    pincode: '800016',
+    phone: '+91 94315 67120',
+    language: 'Bhojpuri / Magahi',
+    preferredLanguage: 'Bhojpuri / Magahi',
+    secondaryLanguage: 'Hindi',
+    dialects: ['Bhojpuri', 'Magahi', 'Hindi'],
+    vendors: {
+      chemist: { 
+        name: 'Apollo Pharmacy — Rajendra Nagar', 
+        phone: '+91 94318 33211', 
+        area: 'Rajendra Nagar Stadium Road',
+        contactPerson: 'Amitabh Mishra'
+      },
+      lpg: { 
+        provider: 'Bharat Gas', 
+        agency: 'Mithila Bharat Gas Agency', 
+        consumerNo: 'BPCL-992144' 
+      },
+      electricity: { 
+        provider: 'NBPDCL Patna Division', 
+        consumerId: 'CA-55120938' 
+      }
+    },
+    vitals: {
+      bloodPressure: '134/86 mmHg',
+      bloodSugarFasting: '124 mg/dL',
+      pulseRate: '68 bpm',
+      lastChecked: 'Today, 7:45 AM'
+    },
+    emergencyContacts: [
+      { name: 'Yuvraj Atri', relation: 'Nephew (You)', phone: '+91 98765 43210', location: 'Bengaluru (Metro)' },
+      { name: 'Dr. R. N. Jha', relation: 'Brother / Physician', phone: '+91 94310 11990', location: 'Patna' }
+    ],
+    preferredPharmacy: {
+      name: 'Apollo Pharmacy — Rajendra Nagar',
+      phone: '+91 94318 33211',
+      address: 'Stadium Road, Rajendra Nagar, Patna',
+      contactPerson: 'Amitabh Mishra'
+    }
   }
 ];
 
-export const INITIAL_TASKS: KanbanTask[] = [
+export const INITIAL_DOCUMENTS: DocumentRecord[] = [
   {
-    id: 'task-1',
-    title: 'Morning BP Medicine (Amlodipine 5mg)',
-    subtitle: '1 tablet after breakfast (Routine Daily)',
-    column: 'done',
-    category: 'medication',
-    time: '8:15 AM',
-    date: 'Today',
-    verificationMethod: 'Verified via Hindi voice call (0:34)',
-    badgeText: 'Dose Confirmed · 8:15 AM',
-    guardrailStatus: {
-      dosageVerified: true,
-      financialChecked: true,
-      emergencyScreened: true
+    id: 'doc-1',
+    parentId: 'parent-1',
+    fileName: 'dr_verma_prescription_pmch.pdf',
+    docType: 'PRESCRIPTION',
+    issuer: {
+      title: 'Dr. S. K. Verma, M.D.',
+      subtitle: 'Consultant Physician & Cardiologist • Senior Ex-Consultant PMCH Patna',
+      address: 'Exhibition Road Chauraha, Patna - 800001',
+      regOrConsumer: 'BCMR / 2004 / 4891'
     },
-    transcript: {
-      callId: 'SARVAM-EXOTEL-CALL-88219-0815',
-      duration: '0:34',
-      timestamp: 'Today at 8:15 AM',
-      audioSimulatedTime: 34,
-      originalLang: 'Bhojpuri / Hindi',
-      originalText: 'हाँ बाबू, दवाई खा लीहली।',
-      translatedText: 'Yes son, I took the medicine.',
-      confidence: 0.98,
-      sentiment: 'Normal',
-      caller: 'Sahay AI Voice Agent (Sarvam AI)',
-      receiver: 'Ramprasad Atri (+91 94310 88219)',
-      sarvamModel: 'Sarvam Saarathi-v2 (Bhojpuri/Hindi STT)',
-      intentBadge: 'Dose Confirmed · 8:15 AM',
-      keywordsDetected: ['नाश्ता (Breakfast)', 'दवाई खा लीहली (Took medicine)', 'तबियत ठीक बा (Feeling good)']
-    }
+    patientOrConsumerName: 'Ramprasad Atri',
+    consultDate: '24-Sep-2026',
+    vitalsOrSummary: 'BP: 128/82, Fasting: 114 mg/dL',
+    extractedItems: [
+      {
+        id: 'rx-1',
+        name: 'Tab Amlodipine',
+        dosage: '5 mg',
+        category: 'Cardio',
+        frequency: 'Once Daily (Morning)',
+        frequencyCode: 'OD',
+        instruction: '1 tablet every morning after breakfast for hypertension control',
+        triggerSlot: '08:00 AM Tomorrow',
+        confidenceScore: 0.98,
+        rawOcrText: 'Tab. Amlodipine 5mg OD (Morn PC)',
+        sourceBox: { top: 36, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'rx-2',
+        name: 'Tab Metformin HCl',
+        dosage: '500 mg',
+        category: 'Diabetes',
+        frequency: 'Twice Daily (Morning & Night)',
+        frequencyCode: 'BD',
+        instruction: '1 tablet twice a day immediately after morning and evening meals',
+        triggerSlot: '08:30 AM & 08:30 PM',
+        confidenceScore: 0.96,
+        rawOcrText: 'Tab. Metformin 500mg BD (Post Meals)',
+        sourceBox: { top: 45, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'rx-3',
+        name: 'Tab Atorvastatin',
+        dosage: '10 mg',
+        category: 'Lipid',
+        frequency: 'At Bedtime (Night)',
+        frequencyCode: 'HS',
+        instruction: '1 tablet once daily at bedtime with warm water for lipid management',
+        triggerSlot: '10:00 PM Tonight',
+        confidenceScore: 0.94,
+        rawOcrText: 'Tab. Atorvastatin 10mg HS (Bedtime)',
+        sourceBox: { top: 54, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'rx-4',
+        name: 'Tab Shellcal (Calcium + D3)',
+        dosage: '500 mg + 250 IU',
+        category: 'Supplement',
+        frequency: 'Once Daily (Morning)',
+        frequencyCode: 'OD',
+        instruction: '1 tablet once daily after lunch for bone density support',
+        triggerSlot: '01:30 PM Tomorrow',
+        confidenceScore: 0.91,
+        rawOcrText: 'Tab. Shellcal 500 OD (Post Lunch)',
+        sourceBox: { top: 63, left: 12, width: 76, height: 7 },
+        status: 'needs_review'
+      }
+    ]
   },
   {
-    id: 'task-2',
-    title: 'Electricity Bill (SBPDCL)',
-    subtitle: 'South Bihar Power Distribution Corp Ltd',
-    column: 'done',
-    category: 'utility',
-    time: '11:00 AM',
-    date: '15th of month',
-    amount: 1420,
-    verificationMethod: 'Auto-paid ₹1,420 via mandate on 15th',
-    badgeText: 'UPI Autopay',
-    guardrailStatus: {
-      dosageVerified: true,
-      financialChecked: true,
-      emergencyScreened: true
+    id: 'doc-2',
+    parentId: 'parent-2',
+    fileName: 'dr_manisha_sinha_prescription.pdf',
+    docType: 'PRESCRIPTION',
+    issuer: {
+      title: 'Dr. Manisha Sinha, M.D., D.N.B.',
+      subtitle: 'Senior Consultant Endocrinologist & Diabetologist',
+      address: 'Boring Canal Road, Patna - 800001',
+      regOrConsumer: 'BCMR / 2011 / 9923'
     },
-    bookingDetails: {
-      serviceName: 'SBPDCL Urban Patna Electricity',
-      provider: 'South Bihar Power Distribution Company',
-      consumerNumber: 'CA-1004892188',
-      dueDate: '18th Every Month',
+    patientOrConsumerName: 'Shanti Devi',
+    consultDate: '25-Sep-2026',
+    vitalsOrSummary: 'BP: 122/78, Fasting: 108 mg/dL',
+    extractedItems: [
+      {
+        id: 'rx-201',
+        name: 'Tab Thyronorm',
+        dosage: '50 mcg',
+        category: 'Thyroid',
+        frequency: 'Once Daily (Morning)',
+        frequencyCode: 'OD',
+        instruction: '1 tablet early morning empty stomach with plain water',
+        triggerSlot: '07:00 AM Tomorrow',
+        confidenceScore: 0.98,
+        rawOcrText: 'Tab. Thyronorm 50mcg OD (Empty Stomach)',
+        sourceBox: { top: 36, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'rx-202',
+        name: 'Tab Telmisartan',
+        dosage: '40 mg',
+        category: 'Cardio',
+        frequency: 'Once Daily (Morning)',
+        frequencyCode: 'OD',
+        instruction: '1 tablet once daily after breakfast for BP management',
+        triggerSlot: '08:30 AM Tomorrow',
+        confidenceScore: 0.97,
+        rawOcrText: 'Tab. Telmisartan 40mg OD (Post Breakfast)',
+        sourceBox: { top: 45, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'rx-203',
+        name: 'Tab Rosuvastatin',
+        dosage: '10 mg',
+        category: 'Lipid',
+        frequency: 'At Bedtime (Night)',
+        frequencyCode: 'HS',
+        instruction: '1 tablet once daily at bedtime',
+        triggerSlot: '10:00 PM Tonight',
+        confidenceScore: 0.95,
+        rawOcrText: 'Tab. Rosuvastatin 10mg HS (Night)',
+        sourceBox: { top: 54, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'rx-204',
+        name: 'Sachet Calcirol (Cholecalciferol)',
+        dosage: '60,000 IU',
+        category: 'Supplement',
+        frequency: 'Once Daily (Morning)',
+        frequencyCode: 'OD',
+        instruction: '1 sachet in warm milk every Sunday morning',
+        triggerSlot: '09:00 AM Sunday',
+        confidenceScore: 0.92,
+        rawOcrText: 'Sachet Calcirol 60k (Once Weekly)',
+        sourceBox: { top: 63, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      }
+    ]
+  },
+  {
+    id: 'doc-3',
+    parentId: 'parent-1',
+    fileName: 'sbpdcl_urban_bill_sept2026.pdf',
+    docType: 'ELECTRICITY_BILL',
+    issuer: {
+      title: 'SBPDCL Patna Urban Desk',
+      subtitle: 'South Bihar Power Distribution Company Ltd',
+      address: 'Vidyut Bhawan, Bailey Road, Patna - 800021',
+      regOrConsumer: 'CA-1004892188'
+    },
+    patientOrConsumerName: 'Ramprasad Atri',
+    consultDate: '15-Sep-2026',
+    vitalsOrSummary: 'Sanctioned Load: 2kW • Units Consumed: 184 kWh • Due: ₹1,420',
+    extractedItems: [
+      {
+        id: 'bill-1',
+        name: 'Energy Charges (184 Units)',
+        dosage: 'Tier-1 Slab',
+        category: 'Utility',
+        frequency: 'Once Daily (Morning)',
+        frequencyCode: 'OD',
+        instruction: 'State government 125 unit power subsidy applied',
+        triggerSlot: '18th of Every Month',
+        confidenceScore: 0.99,
+        rawOcrText: 'Energy Charge @ Rs 6.10/unit: ₹1,120.00',
+        sourceBox: { top: 38, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'bill-2',
+        name: 'Fixed Monthly Meter Demand Charge',
+        dosage: 'Domestic LT',
+        category: 'Utility',
+        frequency: 'Once Daily (Morning)',
+        frequencyCode: 'OD',
+        instruction: 'Standard 2kW domestic residential meter charge',
+        triggerSlot: '18th of Every Month',
+        confidenceScore: 0.99,
+        rawOcrText: 'Fixed Charge (2kW): ₹150.00',
+        sourceBox: { top: 48, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'bill-3',
+        name: 'Electricity Duty & State Cess',
+        dosage: 'Govt Tax',
+        category: 'Utility',
+        frequency: 'Once Daily (Morning)',
+        frequencyCode: 'OD',
+        instruction: 'Bihar state power development cess',
+        triggerSlot: '18th of Every Month',
+        confidenceScore: 0.98,
+        rawOcrText: 'Electricity Duty & Cess: ₹150.00',
+        sourceBox: { top: 58, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      }
+    ]
+  }
+];
+
+export const getTasksForParent = (parent: ParentProfile): KanbanTask[] => {
+  const chemistName = parent.vendors.chemist.name;
+  const chemistPhone = parent.vendors.chemist.phone;
+  const chemistArea = parent.vendors.chemist.area;
+  const chemistPerson = parent.vendors.chemist.contactPerson || chemistName;
+  const lpgProvider = parent.vendors.lpg.provider;
+  const lpgAgency = parent.vendors.lpg.agency;
+  const lpgConsumer = parent.vendors.lpg.consumerNo;
+  const elecProvider = parent.vendors.electricity.provider;
+  const elecConsumer = parent.vendors.electricity.consumerId;
+  const parentName = parent.name;
+  const parentPhone = parent.phone;
+  const parentAddress = `${parent.address}, ${parent.city}`;
+  const isMother = parent.relation.toLowerCase().includes('mother');
+
+  return [
+    {
+      id: `task-1-${parent.id}`,
+      title: isMother ? 'Morning Thyroid Medicine (Thyronorm 50mcg)' : 'Morning BP Medicine (Amlodipine 5mg)',
+      subtitle: isMother ? '1 tablet early morning empty stomach' : '1 tablet after breakfast (Routine Daily)',
+      column: 'done',
+      category: 'medication',
+      time: '8:15 AM',
+      date: 'Today',
+      verificationMethod: `Verified via ${parent.preferredLanguage.split('/')[0].trim()} voice call (0:34)`,
+      badgeText: 'Dose Confirmed · 8:15 AM',
+      guardrailStatus: {
+        dosageVerified: true,
+        financialChecked: true,
+        emergencyScreened: true
+      },
+      transcript: {
+        callId: `SARVAM-EXOTEL-CALL-${parent.id}-0815`,
+        duration: '0:34',
+        timestamp: 'Today at 8:15 AM',
+        audioSimulatedTime: 34,
+        originalLang: parent.preferredLanguage,
+        originalText: isMother ? 'हाँ बाबू, खाली पेटे थायरॉइड के गोली खा लेले बानी।' : 'हाँ बाबू, दवाई खा लीहली।',
+        translatedText: isMother ? 'Yes son, I have taken the thyroid tablet on an empty stomach.' : 'Yes son, I took the medicine.',
+        confidence: 0.98,
+        sentiment: 'Normal',
+        caller: 'Sahay AI Voice Agent (Sarvam AI)',
+        receiver: `${parentName} (${parentPhone})`,
+        sarvamModel: 'Sarvam Saarathi-v2 (Indic STT)',
+        intentBadge: 'Dose Confirmed · 8:15 AM',
+        keywordsDetected: ['नाश्ता (Breakfast)', 'दवाई खा लीहली (Took medicine)', 'तबियत ठीक बा (Feeling good)']
+      }
+    },
+    {
+      id: `task-2-${parent.id}`,
+      title: `Electricity Bill (${elecProvider.split(' ')[0]})`,
+      subtitle: `${elecProvider} • Consumer #${elecConsumer}`,
+      column: 'done',
+      category: 'utility',
+      time: '11:00 AM',
+      date: '15th of month',
       amount: 1420,
-      subsidyStatus: 'Govt 125 units slab applied',
-      deliveryAddress: 'House #42, Road No. 4, Kankarbagh, Patna'
-    }
-  },
-  {
-    id: 'task-gas-completed',
-    title: 'Indane Gas Refill Delivery',
-    subtitle: 'Delivered via Kankarbagh Gas Agency — Digital Receipt Confirmed',
-    column: 'done',
-    category: 'utility',
-    time: '11:30 AM',
-    date: 'Today',
-    amount: 912,
-    verificationMethod: 'Delivered & Confirmed at Doorstep',
-    badgeText: 'Delivered · 11:30 AM',
-    guardrailStatus: {
-      dosageVerified: true,
-      financialChecked: true,
-      emergencyScreened: true
+      verificationMethod: 'Auto-paid ₹1,420 via mandate on 15th',
+      badgeText: 'UPI Autopay',
+      guardrailStatus: {
+        dosageVerified: true,
+        financialChecked: true,
+        emergencyScreened: true
+      },
+      bookingDetails: {
+        serviceName: `${elecProvider} Residential`,
+        provider: elecProvider,
+        consumerNumber: elecConsumer,
+        dueDate: '18th Every Month',
+        amount: 1420,
+        subsidyStatus: 'Govt 125 units slab applied',
+        deliveryAddress: parentAddress
+      }
     },
-    bookingDetails: {
-      serviceName: 'Indane 14.2kg Domestic LPG Refill',
-      provider: 'Indian Oil Corporation Ltd (IOCL)',
-      consumerNumber: 'IND-8831920',
-      dueDate: 'Completed Today',
+    {
+      id: `task-gas-completed-${parent.id}`,
+      title: `${lpgProvider.split(' ')[0]} Gas Refill Delivery`,
+      subtitle: `Delivered via ${lpgAgency} — Digital Receipt Confirmed`,
+      column: 'done',
+      category: 'utility',
+      time: '11:30 AM',
+      date: 'Today',
       amount: 912,
-      subsidyStatus: 'DBTL Direct Transfer Complete',
-      deliveryAddress: 'House #42, Road No. 4, Kankarbagh, Patna'
-    }
-  },
-  {
-    id: 'task-3',
-    title: 'Chemist Refill Dispatch — Sharma Medical Store',
-    subtitle: 'Metformin 500mg (2 strips) + Amlodipine 5mg (1 strip)',
-    column: 'needs_approval',
-    category: 'chemist',
-    time: 'Due Today',
-    date: 'Prescription Refill',
-    amount: 340.00,
-    vendor: 'Sharma Medical Store, Kankarbagh',
-    badgeText: 'Manual Sign-off Required',
-    guardrailStatus: {
-      dosageVerified: true,
-      financialChecked: true,
-      emergencyScreened: true
+      verificationMethod: 'Delivered & Confirmed at Doorstep',
+      badgeText: 'Delivered · 11:30 AM',
+      guardrailStatus: {
+        dosageVerified: true,
+        financialChecked: true,
+        emergencyScreened: true
+      },
+      bookingDetails: {
+        serviceName: `${lpgProvider} 14.2kg Domestic LPG Refill`,
+        provider: lpgProvider,
+        consumerNumber: lpgConsumer,
+        dueDate: 'Completed Today',
+        amount: 912,
+        subsidyStatus: 'DBTL Direct Transfer Complete',
+        deliveryAddress: parentAddress
+      }
     },
-    whatsappDraft: {
-      recipientName: 'Mukesh Sharma (Sharma Medical Store)',
-      recipientPhone: '+91 94302 55441',
-      shopName: 'Sharma Medical Store, Kankarbagh',
-      deliveryAddress: 'House #42, Road No. 4, Kankarbagh, Patna (Near Tempo Stand)',
-      items: [
-        { name: 'Tab Metformin 500mg (Glycomet 500)', qty: '2 strips (20 tabs)', estimatedPrice: 190.00 },
-        { name: 'Tab Amlodipine 5mg (Amlong 5)', qty: '1 strip (15 tabs)', estimatedPrice: 150.00 }
-      ],
-      messageHindi: 'नमस्ते मुकेश जी! सहाय AI (रामप्रसाद अत्री जी के सुपुत्र युवराज द्वारा अधिकृत)।\nकृपया नीचे दी गई दवाइयां आज शाम 5 बजे तक घर पहुँचा दीजिए:\n\n1. Tab Metformin 500mg - 2 स्ट्रिप\n2. Tab Amlodipine 5mg - 1 स्ट्रिप\n\nपता: मकान नं 42, रोड नं 4, कंकड़बाग।\nभुगतान: डिलीवरी पर ऑनलाइन UPI (₹340) तुरंत ट्रांसफर कर दिया जाएगा। धन्यवाद!',
-      messageEnglish: 'Hello Mukesh ji! Sahay AI (Authorized on behalf of Ramprasad Atri\'s son Yuvraj).\nPlease deliver the following medicines by 5 PM today:\n1. Tab Metformin 500mg - 2 strips\n2. Tab Amlodipine 5mg - 1 strip\nAddress: House #42, Road #4, Kankarbagh.\nPayment: UPI ₹340 will be transferred upon delivery receipt. Thank you!'
-    }
-  },
-  {
-    id: 'task-4',
-    title: 'Indane Gas Cylinder Booking',
-    subtitle: 'Consumer # IND-8831920 (Next cycle scheduled)',
-    column: 'needs_approval',
-    category: 'utility',
-    time: 'Due in 4 days',
-    date: 'LPG Refill',
-    amount: 912.00,
-    vendor: 'Patliputra Indane Gas Agency',
-    badgeText: 'Payment Authorization',
-    guardrailStatus: {
-      dosageVerified: true,
-      financialChecked: true,
-      emergencyScreened: true
+    {
+      id: `task-3-${parent.id}`,
+      title: `Chemist Refill Dispatch — ${chemistName}`,
+      subtitle: isMother 
+        ? 'Thyronorm 50mcg (1 bottle 120s) + Telmisartan 40mg (1 strip)'
+        : 'Metformin 500mg (2 strips) + Amlodipine 5mg (1 strip)',
+      column: 'needs_approval',
+      category: 'chemist',
+      time: 'Due Today',
+      date: 'Prescription Refill',
+      amount: 340.00,
+      vendor: `${chemistName}, ${chemistArea}`,
+      badgeText: 'Manual Sign-off Required',
+      guardrailStatus: {
+        dosageVerified: true,
+        financialChecked: true,
+        emergencyScreened: true
+      },
+      whatsappDraft: {
+        recipientName: `${chemistPerson} (${chemistName})`,
+        recipientPhone: chemistPhone,
+        shopName: `${chemistName}, ${chemistArea}`,
+        deliveryAddress: parentAddress,
+        items: isMother ? [
+          { name: 'Tab Thyronorm 50mcg (120 tabs)', qty: '1 bottle', estimatedPrice: 190.00 },
+          { name: 'Tab Telmisartan 40mg (Telma 40)', qty: '1 strip (15 tabs)', estimatedPrice: 150.00 }
+        ] : [
+          { name: 'Tab Metformin 500mg (Glycomet 500)', qty: '2 strips (20 tabs)', estimatedPrice: 190.00 },
+          { name: 'Tab Amlodipine 5mg (Amlong 5)', qty: '1 strip (15 tabs)', estimatedPrice: 150.00 }
+        ],
+        messageHindi: `नमस्ते ${chemistPerson.split(' ')[0]} जी! सहाय AI (${parentName} जी के सुपुत्र युवराज द्वारा अधिकृत)।\nकृपया नीचे दी गई दवाइयां आज शाम 5 बजे तक घर पहुँचा दीजिए:\n\n1. ${isMother ? 'Tab Thyronorm 50mcg' : 'Tab Metformin 500mg'} - 2 स्ट्रिप\n2. ${isMother ? 'Tab Telmisartan 40mg' : 'Tab Amlodipine 5mg'} - 1 स्ट्रिप\n\nपता: ${parentAddress}।\nभुगतान: डिलीवरी पर ऑनलाइन UPI (₹340) तुरंत ट्रांसफर कर दिया जाएगा। धन्यवाद!`,
+        messageEnglish: `Hello ${chemistPerson.split(' ')[0]} ji! Sahay AI (Authorized on behalf of ${parentName}'s family).\nPlease deliver the following medicines by 5 PM today:\n1. ${isMother ? 'Tab Thyronorm 50mcg' : 'Tab Metformin 500mg'} - 2 strips\n2. ${isMother ? 'Tab Telmisartan 40mg' : 'Tab Amlodipine 5mg'} - 1 strip\nAddress: ${parentAddress}.\nPayment: UPI ₹340 will be transferred upon delivery receipt. Thank you!`
+      }
     },
-    bookingDetails: {
-      serviceName: 'Indane 14.2kg Domestic LPG Refill',
-      provider: 'Indian Oil Corporation Ltd (IOCL)',
-      consumerNumber: 'IND-8831920',
-      dueDate: 'In 4 days (Est. Empty: Oct 1)',
+    {
+      id: `task-4-${parent.id}`,
+      title: `${lpgProvider.split(' ')[0]} Cylinder Booking`,
+      subtitle: `Consumer # ${lpgConsumer} (Next cycle scheduled)`,
+      column: 'needs_approval',
+      category: 'utility',
+      time: 'Due in 4 days',
+      date: 'LPG Refill',
       amount: 912.00,
-      subsidyStatus: 'Direct Benefit Transfer (DBTL) Active',
-      deliveryAddress: 'House #42, Road No. 4, Kankarbagh, Patna'
-    }
-  },
-  {
-    id: 'task-5',
-    title: 'Vitamin D3 Refill Failed',
-    subtitle: 'Shellcal 500 + D3 Chewable (Monthly Pack)',
-    column: 'blocked',
-    category: 'chemist',
-    time: '12:45 PM',
-    date: 'Stock Issue',
-    amount: 210.00,
-    vendor: 'Sharma Medical Store',
-    badgeText: 'Stock Blocker',
-    guardrailStatus: {
-      dosageVerified: true,
-      financialChecked: true,
-      emergencyScreened: true
+      vendor: lpgAgency,
+      badgeText: 'Payment Authorization',
+      guardrailStatus: {
+        dosageVerified: true,
+        financialChecked: true,
+        emergencyScreened: true
+      },
+      bookingDetails: {
+        serviceName: `${lpgProvider} 14.2kg Domestic LPG Refill`,
+        provider: lpgProvider,
+        consumerNumber: lpgConsumer,
+        dueDate: 'In 4 days',
+        amount: 912.00,
+        subsidyStatus: 'Direct Benefit Transfer (DBTL) Active',
+        deliveryAddress: parentAddress
+      }
     },
-    blockerDetails: {
-      failureCode: 'OUT_OF_STOCK',
-      reason: 'Sharma Medical Store reported Shellcal-D3 60k chewables temporarily out of stock (Next delivery expected in 3 days).',
-      attempts: 1,
-      lastAttemptTime: 'Today at 12:45 PM',
-      suggestedActions: [
-        'Route to Apollo Pharmacy (Kankarbagh Colony Road)',
-        'Route to Patliputra Pharma (Boring Road, 45 min delivery)',
-        'Order via Tata 1mg Express (24 hr courier)'
-      ]
-    }
-  },
-  {
-    id: 'task-6',
-    title: 'Evening Check-in Call (2 Attempts Unanswered)',
-    subtitle: 'Scheduled routine health check & dinner reminder',
-    column: 'blocked',
-    category: 'checkin',
-    time: '10:30 AM',
-    date: 'Unanswered Alert',
-    badgeText: 'Call Unanswered',
-    guardrailStatus: {
-      dosageVerified: true,
-      financialChecked: true,
-      emergencyScreened: true
+    {
+      id: `task-5-${parent.id}`,
+      title: 'Vitamin D3 Refill Failed',
+      subtitle: 'Shellcal 500 + D3 Chewable (Monthly Pack)',
+      column: 'blocked',
+      category: 'chemist',
+      time: '12:45 PM',
+      date: 'Stock Issue',
+      amount: 210.00,
+      vendor: chemistName,
+      badgeText: 'Stock Blocker',
+      guardrailStatus: {
+        dosageVerified: true,
+        financialChecked: true,
+        emergencyScreened: true
+      },
+      blockerDetails: {
+        failureCode: 'OUT_OF_STOCK',
+        reason: `${chemistName} reported Shellcal-D3 60k chewables temporarily out of stock (Next delivery expected in 3 days).`,
+        attempts: 1,
+        lastAttemptTime: 'Today at 12:45 PM',
+        suggestedActions: [
+          'Route to Apollo Pharmacy (Kankarbagh Colony Road)',
+          'Route to Patliputra Pharma (Boring Road, 45 min delivery)',
+          'Order via Tata 1mg Express (24 hr courier)'
+        ]
+      }
     },
-    blockerDetails: {
-      failureCode: 'NO_ANSWER',
-      reason: 'Voice AI dialed at 10:00 AM and 10:30 AM. Call rang out for 45s without answer.',
-      attempts: 2,
-      lastAttemptTime: 'Today at 10:30 AM',
-      suggestedActions: [
-        'Trigger Immediate Child Emergency Call',
-        'Ping Neighbor Manoj Kumar (+91 98350 11223) via WhatsApp',
-        'Trigger Loud Priority Siren Ring via Exotel Outbound'
-      ]
+    {
+      id: `task-6-${parent.id}`,
+      title: 'Evening Check-in Call (2 Attempts Unanswered)',
+      subtitle: 'Scheduled routine health check & dinner reminder',
+      column: 'blocked',
+      category: 'checkin',
+      time: '10:30 AM',
+      date: 'Unanswered Alert',
+      badgeText: 'Call Unanswered',
+      guardrailStatus: {
+        dosageVerified: true,
+        financialChecked: true,
+        emergencyScreened: true
+      },
+      blockerDetails: {
+        failureCode: 'NO_ANSWER',
+        reason: `Voice AI dialed ${parentName} at 10:00 AM and 10:30 AM. Call rang out for 45s without answer.`,
+        attempts: 2,
+        lastAttemptTime: 'Today at 10:30 AM',
+        suggestedActions: [
+          'Trigger Immediate Child Emergency Call',
+          `Ping Neighbor Manoj Kumar (+91 98350 11223) via WhatsApp`,
+          'Trigger Loud Priority Siren Ring via Exotel Outbound'
+        ]
+      }
     }
-  }
-];
+  ];
+};
 
-export const PRESCRIPTION_OCR_ITEMS: PrescriptionItem[] = [
-  {
-    id: 'rx-1',
-    medicineName: 'Tab Amlodipine',
-    dosage: '5 mg',
-    frequency: 'Once Daily (Morning)',
-    frequencyCode: 'OD',
-    instruction: '1 tablet every morning after breakfast for hypertension control',
-    nextTriggerTime: '08:00 AM Tomorrow',
-    confidence: 0.98,
-    category: 'Cardio',
-    rawOcrText: 'Tab. Amlodipine 5mg OD (Morn PC)',
-    sourceBox: {
-      top: 36,
-      left: 12,
-      width: 76,
-      height: 7
-    },
-    status: 'verified'
-  },
-  {
-    id: 'rx-2',
-    medicineName: 'Tab Metformin HCl',
-    dosage: '500 mg',
-    frequency: 'Twice Daily (Morning & Night)',
-    frequencyCode: 'BD',
-    instruction: '1 tablet twice a day immediately after morning and evening meals',
-    nextTriggerTime: '08:30 AM & 08:30 PM',
-    confidence: 0.96,
-    category: 'Diabetes',
-    rawOcrText: 'Tab. Metformin 500mg BD (Post Meals)',
-    sourceBox: {
-      top: 45,
-      left: 12,
-      width: 76,
-      height: 7
-    },
-    status: 'verified'
-  },
-  {
-    id: 'rx-3',
-    medicineName: 'Tab Atorvastatin',
-    dosage: '10 mg',
-    frequency: 'At Bedtime (Night)',
-    frequencyCode: 'HS',
-    instruction: '1 tablet once daily at bedtime with warm water for lipid management',
-    nextTriggerTime: '10:00 PM Tonight',
-    confidence: 0.94,
-    category: 'Lipid',
-    rawOcrText: 'Tab. Atorvastatin 10mg HS (Bedtime)',
-    sourceBox: {
-      top: 54,
-      left: 12,
-      width: 76,
-      height: 7
-    },
-    status: 'verified'
-  },
-  {
-    id: 'rx-4',
-    medicineName: 'Tab Shellcal (Calcium + D3)',
-    dosage: '500 mg + 250 IU',
-    frequency: 'Once Daily (Morning)',
-    frequencyCode: 'OD',
-    instruction: '1 tablet once daily after lunch for bone density support',
-    nextTriggerTime: '01:30 PM Tomorrow',
-    confidence: 0.91,
-    category: 'Supplement',
-    rawOcrText: 'Tab. Shellcal 500 OD (Post Lunch)',
-    sourceBox: {
-      top: 63,
-      left: 12,
-      width: 76,
-      height: 7
-    },
-    status: 'needs_review'
-  }
-];
+export const INITIAL_TASKS: KanbanTask[] = getTasksForParent(INITIAL_PARENTS[0]);
 
-export const AGENT_PIPELINE_NODES: AgentNode[] = [
+export const PRESCRIPTION_OCR_ITEMS: PrescriptionItem[] = INITIAL_DOCUMENTS[0].extractedItems.map(item => ({
+  id: item.id,
+  medicineName: item.name,
+  dosage: item.dosage || '5 mg',
+  frequency: item.frequency as any,
+  frequencyCode: (item.frequencyCode || 'OD') as any,
+  instruction: item.instruction || 'Take once daily as directed by doctor',
+  nextTriggerTime: item.triggerSlot,
+  confidence: item.confidenceScore,
+  sourceBox: item.sourceBox || { top: 36, left: 12, width: 76, height: 7 },
+  status: item.status || 'verified',
+  category: (item.category || 'Cardio') as any,
+  rawOcrText: item.rawOcrText || `${item.name} ${item.dosage || ''} ${item.frequencyCode || ''}`
+}));
+
+export const getAgentNodesForParent = (parent: ParentProfile): AgentNode[] => [
   {
     id: 'agent-caller',
     name: 'Caller Voice Agent',
@@ -503,17 +804,18 @@ export const AGENT_PIPELINE_NODES: AgentNode[] = [
     provider: 'Sarvam Saarathi v2 + Exotel SIP',
     type: 'voice_telephony',
     status: 'active',
-    activeDescription: 'Transcribing live Bhojpuri/Hindi dual-stream audio. VAD & latency optimized for 2G/VoLTE calls in Bihar.',
+    activeDescription: `Transcribing live ${parent.preferredLanguage} dual-stream audio. VAD & latency optimized for 2G/VoLTE calls in ${parent.city}.`,
     latencyMs: 340,
-    model: 'Sarvam-Saarathi-Audio-2.0 (Hindi/Bhojpuri Acoustic)',
-    systemPromptSummary: 'Compassionate Bihari eldercare caller assistant. Speaks natural conversational Hindi with Bhojpuri colloquial respect markers (बाबू, प्रणाम). Strict instruction never to provide medical advice or modify dosage.',
+    model: `Sarvam-Saarathi-Audio-2.0 (${parent.dialects.join('/')} Acoustic)`,
+    systemPromptSummary: `Compassionate Bihari eldercare caller assistant. Speaks natural conversational Hindi with local colloquial respect markers (बाबू, प्रणाम). Monitored patient: ${parent.name}. Strict instruction never to provide unauthorized medical advice.`,
     lastPayload: {
-      callSessionId: 'EXO-991204-PATNA',
-      targetNumber: '+91 94310 88219',
+      callSessionId: `EXO-PATNA-${parent.id.toUpperCase()}`,
+      targetNumber: parent.phone,
+      targetPatient: parent.name,
       codec: 'G.711u / AMR-WB',
       asrEngine: 'Sarvam-Speech-to-Text-Indic',
-      detectedLanguage: 'Bhojpuri-Hindi Hybrid (Confidence 98.4%)',
-      lastSpokenUtterance: 'हाँ बाबू, दवाई खा लीहली।',
+      detectedLanguage: `${parent.preferredLanguage} (Confidence 98.4%)`,
+      lastSpokenUtterance: parent.relation.toLowerCase().includes('mother') ? 'हाँ बाबू, खाली पेटे थायरॉइड के गोली खा लेले बानी।' : 'हाँ बाबू, दवाई खा लीहली।',
       vadDurationSeconds: 34.2
     }
   },
@@ -527,10 +829,10 @@ export const AGENT_PIPELINE_NODES: AgentNode[] = [
     activeDescription: 'Evaluating clinical guardrail policies, checking prescription schema constraints, and managing execution queue.',
     latencyMs: 82,
     model: 'State-Machine v4.2 + Safety Classifier',
-    systemPromptSummary: 'Deterministic state transitions for parent care workflows. Enforces hard safety invariants: Zero financial transaction without explicit child token, zero automated dosage variation, instant trigger on distress keywords.',
+    systemPromptSummary: `Deterministic state transitions for parent care workflows (${parent.name}). Enforces hard safety invariants: Zero financial transaction without explicit child token, zero automated dosage variation.`,
     lastPayload: {
       currentState: 'INTAKE_CONFIRMED_AWAITING_DISPATCH',
-      verifiedTask: 'MEDICATION_AMLO_5MG',
+      verifiedTask: `MEDICATION_CONFIRMED_${parent.name.split(' ')[0].toUpperCase()}`,
       financialGate: 'PASS (₹0.00 voice checkin)',
       distressKeywordScore: '0.01 (No emergency detected)',
       nextScheduledTransition: 'EVENING_CHECKIN_20_00_IST'
@@ -543,19 +845,21 @@ export const AGENT_PIPELINE_NODES: AgentNode[] = [
     provider: 'Meta WhatsApp Business API + Setu UPI Gateway',
     type: 'execution_layer',
     status: 'active',
-    activeDescription: 'Formatting local language WhatsApp orders for local chemists and queuing authorized UPI payments.',
+    activeDescription: `Formatting local language WhatsApp orders for designated chemist (${parent.vendors.chemist.name}) and queuing authorized UPI payments.`,
     latencyMs: 190,
     model: 'WhatsApp-Bilingual-Template-Gen v2',
-    systemPromptSummary: 'Executes approved actions in the physical world: dispatches Hindi purchase orders to localized chemists, submits verified bill IDs to Bharat BillPay (BBPS), and delivers summary cards to child via push.',
+    systemPromptSummary: `Executes approved actions in physical world: dispatches Hindi purchase orders to ${parent.vendors.chemist.name}, submits verified consumer IDs (${parent.vendors.electricity.consumerId}) to Bharat BillPay (BBPS).`,
     lastPayload: {
       channel: 'WHATSAPP_BUSINESS_CLOUD_API',
-      vendorRecipient: '+91 94302 55441 (Sharma Medical Store)',
+      vendorRecipient: `${parent.vendors.chemist.phone} (${parent.vendors.chemist.name})`,
       messageStatus: 'QUEUED_FOR_CHILD_SIGN_OFF',
-      paymentMandateId: 'SETU-BBPS-PATNA-1420',
+      paymentMandateId: `SETU-BBPS-${parent.id.toUpperCase()}-1420`,
       dispatchEstimatedWindow: 'Same-day 17:00 IST'
     }
   }
 ];
+
+export const AGENT_PIPELINE_NODES: AgentNode[] = getAgentNodesForParent(INITIAL_PARENTS[0]);
 
 export const INITIAL_EVENT_LOGS: EventLogItem[] = [
   {

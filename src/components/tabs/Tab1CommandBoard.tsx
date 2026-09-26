@@ -76,7 +76,7 @@ export const Tab1CommandBoard: React.FC = () => {
             <div className="flex items-baseline gap-2 mt-0.5">
               <span className="text-base font-semibold text-slate-900">{doneTasks.length} Completed</span>
               <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
-                +1 confirmed 8:15 AM
+                +1 confirmed {activeParent.language.split('/')[0]}
               </span>
             </div>
           </div>
@@ -112,7 +112,9 @@ export const Tab1CommandBoard: React.FC = () => {
               Next Scheduled Check-in
             </span>
             <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-base font-semibold text-slate-900">8:00 PM Dinner Call</span>
+              <span className="text-base font-semibold text-slate-900">
+                {activeParent.name.split(' ')[0]} • 8:00 PM Dinner Call
+              </span>
               <span className="text-xs font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200/60">
                 Sarvam IVR
               </span>
@@ -150,7 +152,7 @@ export const Tab1CommandBoard: React.FC = () => {
         </div>
 
         <span className="text-xs text-slate-500 font-medium">
-          Showing {filteredTasks.length} active items for {activeParent.name.split(' ')[0]}
+          Showing {filteredTasks.length} active items for {activeParent.name} ({activeParent.location.split(',')[0]})
         </span>
       </div>
 
@@ -437,7 +439,7 @@ export const Tab1CommandBoard: React.FC = () => {
 
                   {/* Standardized Action CTAs */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
-                    {task.id === 'task-5' && (
+                    {task.category === 'chemist' && (
                       <button
                         onClick={() => setActiveChemistModalTask(task)}
                         className="w-full rounded-lg text-xs font-medium px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-[0.98]"
@@ -447,7 +449,7 @@ export const Tab1CommandBoard: React.FC = () => {
                       </button>
                     )}
 
-                    {task.id === 'task-6' && (
+                    {task.category === 'checkin' && (
                       <button
                         onClick={() => {
                           setActiveAuditTask(task);

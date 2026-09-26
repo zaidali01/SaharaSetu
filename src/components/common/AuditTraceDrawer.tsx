@@ -13,7 +13,7 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const AuditTraceDrawer: React.FC = () => {
-  const { activeAuditTask, setActiveAuditTask } = useApp();
+  const { activeAuditTask, setActiveAuditTask, activeDocument, activeParent } = useApp();
 
   if (!activeAuditTask) return null;
 
@@ -79,8 +79,9 @@ export const AuditTraceDrawer: React.FC = () => {
               </div>
               <div className="p-3 rounded-xl border border-zinc-200 space-y-2 font-mono text-[11px] bg-zinc-900 text-zinc-200">
                 <div className="text-emerald-400">// Grounded Document Reference</div>
-                <div>Source: Dr. S.K. Verma PMCH Rx Slip (Patna)</div>
-                <div>Hash: sha256:7f8a92cb...d4e1</div>
+                <div>Source: {activeDocument.issuer.title} ({activeDocument.fileName})</div>
+                <div>Hash: sha256:7f8a92cb...{activeParent.id}</div>
+                <div>Issuer: {activeDocument.issuer.address}</div>
                 <div>Bounding Box: [x: 12%, y: 45%, w: 76%, h: 7%]</div>
               </div>
             </div>
@@ -104,7 +105,7 @@ export const AuditTraceDrawer: React.FC = () => {
                   <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div>
                     <div className="font-semibold text-amber-950">Rule #2: Mandatory 1-Click Approval</div>
-                    <div className="text-amber-800/80 text-[11px]">Financial transaction locked until child signs off from dashboard.</div>
+                    <div className="text-amber-800/80 text-[11px]">Financial transaction locked until family signs off from dashboard.</div>
                   </div>
                 </div>
 
