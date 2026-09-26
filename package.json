@@ -7,7 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "npm run test:trackb",
+    "test:trackb": "vite-node src/utils/__tests__/index.ts",
+    "test:ocr": "cd ocr_service && .venv/bin/python -m unittest test_ocr -v",
+    "test:guardrails": "cd backend && node test-guardrails.js",
+    "samples": "cd ocr_service && .venv/bin/python make_samples.py",
+    "verify:trackb": "npm run lint && npx tsc -b --noEmit && npm run test:trackb && npm run test:ocr && npm run test:guardrails"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",
@@ -30,6 +36,7 @@
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.17",
     "typescript": "~6.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vite-node": "^6.0.0"
   }
 }
