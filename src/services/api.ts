@@ -338,7 +338,7 @@ export const apiService = {
         res = await fetchWithTimeout(`${API_BASE}/ocr/extract`, {
           method: 'POST',
           body: formData
-        }, 15000);
+        }, 3000);
       } else {
         res = await fetchWithTimeout(`${API_BASE}/ocr/extract`, {
           method: 'POST',
@@ -348,7 +348,7 @@ export const apiService = {
             patientName: input.patientName || patientNameArg || 'Ramakant Mishra',
             base64Image: input.base64Image
           })
-        }, 15000);
+        }, 3000);
       }
 
       if (!res.ok) {

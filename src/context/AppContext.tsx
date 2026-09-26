@@ -332,13 +332,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
   // Dynamic upload document handler. Prefers the Track B service on the
-  // backend (Gemini Vision, server-side) and falls back to the in-browser
-  // engine, then to the offline normalizer, so the demo never hard-fails.
+  // Dynamic upload document handler. High-speed pipeline with fast fallback.
   const uploadDocument = async (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE'; previewImageUrl?: string }): Promise<DocumentRecord> => {
     setIsOcrProcessing(true);
     let newDoc: DocumentRecord;
     const fileName = typeof file === 'string' ? file : file.name || 'prescription_document.png';
     let usedBackendOcr = false;
+
+    // Fast-path for preset clicks (instant response without network latency)
+    const isMockPreset = typeof file === 'string' || (!(file instanceof File) && !file.previewImageUrl);
+    if (isMockPreset) {
+      newDoc = parseUploadedDocument(file, activeParent);
+      setDocuments((prev) => [newDoc, ...prev.filter(d => d.id !== newDoc.id)]);
+      setActiveDocument(newDoc);
+      setIsOcrProcessing(false);
+      return newDoc;
+    }
 
     try {
       // 1. Try the real backend OCR pipeline first.
