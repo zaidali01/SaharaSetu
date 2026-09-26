@@ -154,6 +154,134 @@ router.get('/documents/:id', async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────
+// PARENTS  (API contract from Teammate 4)
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/parent/active
+ * Returns the currently active parent profile with full vendor contacts.
+ * Shape matches activeParent object consumed by the Command Board (Tab 1)
+ * and Telemetry Trace (Tab 3).
+ * Falls back to seed data so the frontend never crashes when offline.
+ */
+router.get('/parent/active', async (req, res) => {
+  try {
+    // Fetch first parent + their vendors joined
+    const { rows } = await pool.query(`
+      SELECT
+        u.id,
+        u.name,
+        u.phone,
+        u.language,
+        u.city,
+        u.address,
+        json_build_object(
+          'chemist', json_build_object(
+            'name',    MAX(CASE WHEN v.vendor_type='chemist'     THEN v.name     END),
+            'phone',   MAX(CASE WHEN v.vendor_type='chemist'     THEN v.phone    END),
+            'area',    MAX(CASE WHEN v.vendor_type='chemist'     THEN v.area     END)
+          ),
+          'lpg', json_build_object(
+            'provider', MAX(CASE WHEN v.vendor_type='lpg'        THEN v.name     END),
+            'agency',   MAX(CASE WHEN v.vendor_type='lpg'        THEN v.area     END),
+            'consumerNo',MAX(CASE WHEN v.vendor_type='lpg'       THEN v.consumer_no END)
+          ),
+          'electricity', json_build_object(
+            'provider',   MAX(CASE WHEN v.vendor_type='electricity' THEN v.name      END),
+            'consumerId', MAX(CASE WHEN v.vendor_type='electricity' THEN v.consumer_no END)
+          )
+        ) AS vendors
+      FROM users u
+      LEFT JOIN vendors v ON v.parent_id = u.id
+      WHERE u.role = 'parent'
+      GROUP BY u.id
+      ORDER BY u.created_at ASC
+      LIMIT 1
+    `);
+
+    if (rows.length === 0) {
+      // ── Offline / demo fallback seed ──────────────────────────────
+      return res.json(SEED_ACTIVE_PARENT);
+    }
+
+    res.json(rows[0]);
+  } catch (err) {
+    // DB unavailable — return seed so frontend never crashes
+    console.warn('[/parent/active] DB error, returning seed data:', err.message);
+    res.json(SEED_ACTIVE_PARENT);
+  }
+});
+
+/**
+ * GET /api/parents/:id
+ * Fetch a specific parent profile by UUID.
+ */
+router.get('/parents/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.*,
+        json_agg(json_build_object(
+          'vendor_type', v.vendor_type,
+          'name', v.name,
+          'phone', v.phone,
+          'area', v.area,
+          'consumer_no', v.consumer_no
+        )) FILTER (WHERE v.id IS NOT NULL) AS vendors_raw
+       FROM users u
+       LEFT JOIN vendors v ON v.parent_id = u.id
+       WHERE u.id = $1
+       GROUP BY u.id`,
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Parent not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/parents
+ * List all registered parent profiles.
+ */
+router.get('/parents', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, phone, language, city FROM users WHERE role = 'parent' ORDER BY created_at ASC`
+    );
+    res.json({ parents: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Offline / demo seed (matches mockData.ts shape) ──────────────
+const SEED_ACTIVE_PARENT = {
+  id: 'seed-parent-001',
+  name: 'Ramesh Kumar',
+  phone: '+91-9876543210',
+  language: 'hi',
+  city: 'Patna',
+  address: 'Rajendra Nagar, Patna, Bihar - 800016',
+  vendors: {
+    chemist: {
+      name: 'Shri Ram Medical Store',
+      phone: '+91-9123456789',
+      area: 'Boring Road, Patna'
+    },
+    lpg: {
+      provider: 'HP Gas',
+      agency: 'Patna HP Gas Agency',
+      consumerNo: 'HP-123456'
+    },
+    electricity: {
+      provider: 'SBPDCL',
+      consumerId: 'SB-987654'
+    }
+  }
+};
+
+// ────────────────────────────────────────────────────────────────
 // HEALTH CHECK
 // ────────────────────────────────────────────────────────────────
 
