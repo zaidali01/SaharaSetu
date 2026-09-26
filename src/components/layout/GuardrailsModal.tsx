@@ -7,14 +7,21 @@ import {
   CheckCircle,
   Pill,
   Lock,
-  AlertTriangle
+  AlertTriangle,
+  Activity
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export const GuardrailsModal: React.FC = () => {
-  const { isGuardrailsOpen, setIsGuardrailsOpen } = useApp();
+  const { isGuardrailsOpen, setIsGuardrailsOpen, eventLogs } = useApp();
 
   if (!isGuardrailsOpen) return null;
+
+  // Live enforcement counters from event logs
+  const paymentsBlocked = eventLogs.filter(l => l.eventType === 'UNAPPROVED_PAYMENT_BLOCKED').length;
+  const dosageRefused = eventLogs.filter(l => l.eventType === 'DOSAGE_MODIFICATION_REFUSED').length;
+  const distressEvents = eventLogs.filter(l => l.eventType === 'CRITICAL_DISTRESS_KEYWORD_DETECTED').length;
+  const totalEnforcements = paymentsBlocked + dosageRefused + distressEvents;
 
   return (
     <AnimatePresence>
@@ -60,6 +67,30 @@ export const GuardrailsModal: React.FC = () => {
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+
+            {/* Live Enforcement Counters (Phase 3 Task 3.5t) */}
+            {totalEnforcements > 0 && (
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/80 space-y-3">
+                <div className="flex items-center gap-2 font-semibold text-slate-800">
+                  <Activity className="w-4 h-4 text-indigo-600" />
+                  <span>Live Enforcement Summary (This Session)</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-center">
+                    <div className="text-lg font-bold text-red-700">{paymentsBlocked}</div>
+                    <div className="text-[10px] text-red-600 font-medium">Payments Blocked</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-orange-50 border border-orange-200 text-center">
+                    <div className="text-lg font-bold text-orange-700">{dosageRefused}</div>
+                    <div className="text-[10px] text-orange-600 font-medium">Dosage Refused</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-center">
+                    <div className="text-lg font-bold text-rose-700">{distressEvents}</div>
+                    <div className="text-[10px] text-rose-600 font-medium">Distress Catches</div>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* Boundary 1 */}
             <div className="p-4 rounded-xl border border-emerald-200/80 bg-emerald-50/40 space-y-2">
@@ -69,8 +100,8 @@ export const GuardrailsModal: React.FC = () => {
                   <Pill className="w-4 h-4 text-emerald-700" />
                   <span>Clinical Boundary</span>
                 </div>
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded">
-                  Enforced (100% Pass)
+                <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded ${dosageRefused > 0 ? 'bg-emerald-200 text-emerald-900' : 'bg-emerald-100 text-emerald-800'}`}>
+                  Enforced (100% Pass){dosageRefused > 0 ? ` • ${dosageRefused} blocked` : ''}
                 </span>
               </div>
               <p className="text-slate-700 leading-relaxed pl-4">
@@ -86,8 +117,8 @@ export const GuardrailsModal: React.FC = () => {
                   <Lock className="w-4 h-4 text-emerald-700" />
                   <span>Financial Shield</span>
                 </div>
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded">
-                  Enforced (100% Pass)
+                <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded ${paymentsBlocked > 0 ? 'bg-emerald-200 text-emerald-900' : 'bg-emerald-100 text-emerald-800'}`}>
+                  Enforced (100% Pass){paymentsBlocked > 0 ? ` • ${paymentsBlocked} blocked` : ''}
                 </span>
               </div>
               <p className="text-slate-700 leading-relaxed pl-4">
@@ -103,8 +134,8 @@ export const GuardrailsModal: React.FC = () => {
                   <AlertTriangle className="w-4 h-4 text-emerald-700" />
                   <span>Emergency Interruption</span>
                 </div>
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded">
-                  Enforced (100% Pass)
+                <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded ${distressEvents > 0 ? 'bg-emerald-200 text-emerald-900' : 'bg-emerald-100 text-emerald-800'}`}>
+                  Enforced (100% Pass){distressEvents > 0 ? ` • ${distressEvents} caught` : ''}
                 </span>
               </div>
               <p className="text-slate-700 leading-relaxed pl-4">
@@ -134,6 +165,11 @@ export const GuardrailsModal: React.FC = () => {
             <span className="text-xs text-slate-500 flex items-center gap-1">
               <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
               All 3 Sentinel Daemons Operational
+              {totalEnforcements > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[10px] font-mono font-semibold">
+                  {totalEnforcements} enforcements
+                </span>
+              )}
             </span>
             <button
               onClick={() => setIsGuardrailsOpen(false)}
@@ -147,3 +183,4 @@ export const GuardrailsModal: React.FC = () => {
     </AnimatePresence>
   );
 };
+

@@ -79,10 +79,13 @@ interface AppContextType {
   resolveStockBlocker: (taskId: string, alternateChemist: string) => void;
   approvePrescriptionSchedule: () => void;
   
-  // Demo Simulator Triggers
+  // Demo & Guardrail Simulator Triggers (Phase 3 Tasks 3.1t & 3.2t)
   triggerSimulateMorningCall: () => void;
   triggerSimulateMissedCall: () => void;
   triggerSimulateDistressAlert: () => void;
+  triggerSimulateUnapprovedPayment: () => void;
+  triggerSimulateDosageChangeAttempt: () => void;
+  triggerResetDemo: () => void;
   
   // Toasts
   toasts: ToastMessage[];
@@ -834,6 +837,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  // Phase 3 Task 3.1t: Guardrail Test for Unapproved Payment Attempt
+  const triggerSimulateUnapprovedPayment = () => {
+    playSound('alert');
+
+    // Add a Critical Flag so it shows in the Alerts Drawer visually
+    addCriticalFlag({
+      type: 'guardrail_payment_blocked',
+      severity: 'critical',
+      title: `🛑 Blocked: ₹1,450 Auto-Debit Attempt`,
+      description: `Guardrail Engine intercepted an unauthorized ₹1,450 payment to local vendor for ${activeParent.name}. Zero-autonomy financial policy enforced — no funds debited.`,
+      actionLabel: 'Review Transaction Log',
+      resolved: false
+    });
+    setIsAlertsDrawerOpen(true);
+
+    addEventLog({
+      agentSource: 'Guardrail Engine',
+      eventType: 'UNAPPROVED_PAYMENT_BLOCKED',
+      severity: 'critical',
+      details: 'Task 3.1t Guardrail Check: Unauthorized payment attempt of ₹1,450 to local vendor was strictly intercepted and blocked. No funds debited.',
+      payload: {
+        attemptedAmount: 1450,
+        currency: 'INR',
+        guardrailRule: 'MAX_AUTONOMOUS_PAYMENT = 0',
+        action: 'STRICT_BLOCK',
+        status: 'PASSED_GUARDRAIL_TEST_3_1T'
+      }
+    });
+
+    addToast({
+      type: 'error',
+      title: '🛑 Guardrail Blocked: Unapproved Payment',
+      message: 'Autonomous payment of ₹1,450 strictly rejected by Policy Engine. Transactions require child authorization.',
+      duration: 6000
+    });
+  };
+
+  // Phase 3 Task 3.2t: Guardrail Test for Dosage Escalation Attempt
+  const triggerSimulateDosageChangeAttempt = () => {
+    playSound('alert');
+
+    // Add a Critical Flag so it shows in the Alerts Drawer visually
+    addCriticalFlag({
+      type: 'guardrail_dosage_refused',
+      severity: 'high',
+      title: `⚕️ Refused: Dosage Change Request from ${activeParent.name}`,
+      description: `Parent requested "दवाई का डोज़ बढ़ा दो, 2 गोली कर दो" during voice call. Agent firmly refused and redirected to physician review. No medication schedule altered.`,
+      actionLabel: 'View Transcript Snippet',
+      resolved: false
+    });
+    setIsAlertsDrawerOpen(true);
+
+    addEventLog({
+      agentSource: 'Guardrail Engine',
+      eventType: 'DOSAGE_MODIFICATION_REFUSED',
+      severity: 'critical',
+      details: 'Task 3.2t Guardrail Check: Parent voice request "दवाई का डोज़ बढ़ा दो, 2 गोली कर दो" was intercepted and refused. Agent redirected to physician review.',
+      payload: {
+        transcriptSnippet: 'दवाई का डोज़ बढ़ा दो, 2 गोली कर दो',
+        detectedIntent: 'ESCALATE_DOSAGE',
+        guardrailRule: 'CANNOT_ALTER_MEDICATION_DOSAGE',
+        action: 'REFUSE_AND_NOTIFY_CHILD',
+        status: 'PASSED_GUARDRAIL_TEST_3_2T'
+      }
+    });
+
+    addToast({
+      type: 'warning',
+      title: '⚕️ Clinical Guardrail: Dosage Change Refused',
+      message: 'Agent firmly refused dose alteration request from call. Logged in telemetry for physician check.',
+      duration: 6000
+    });
+  };
+
+  // Phase 3 Task 3.6t: Reset Demo State (clears simulated flags/tasks for clean re-run)
+  const triggerResetDemo = () => {
+    setCriticalFlags(INITIAL_CRITICAL_FLAGS);
+    setTasks(INITIAL_TASKS);
+    setEventLogs(INITIAL_EVENT_LOGS);
+    setIsAlertsDrawerOpen(false);
+    setDistressAlertModalData(null);
+    playSound('ping');
+    addToast({
+      type: 'info',
+      title: 'Demo State Reset',
+      message: 'All simulated flags, tasks, and logs cleared. Dashboard ready for a fresh stage run.'
+    });
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -880,6 +972,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerSimulateMorningCall,
         triggerSimulateMissedCall,
         triggerSimulateDistressAlert,
+        triggerSimulateUnapprovedPayment,
+        triggerSimulateDosageChangeAttempt,
+        triggerResetDemo,
         toasts,
         addToast,
         removeToast,

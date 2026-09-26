@@ -149,7 +149,7 @@ export interface EventLogItem {
 
 export interface CriticalFlag {
   id: string;
-  type: 'missed_call' | 'distress_keyword' | 'stock_out' | 'abnormal_vitals';
+  type: 'missed_call' | 'distress_keyword' | 'stock_out' | 'abnormal_vitals' | 'guardrail_payment_blocked' | 'guardrail_dosage_refused';
   severity: 'high' | 'critical' | 'medium';
   title: string;
   description: string;
