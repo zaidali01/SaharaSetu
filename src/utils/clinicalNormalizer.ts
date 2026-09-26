@@ -22,126 +22,145 @@ export interface NormalizedFrequency {
 export function normalizeFrequency(rawInput: string): NormalizedFrequency {
   const text = (rawInput || '').trim().toLowerCase();
 
-  // Once daily EVENING / OD evening / 0-0-1.
+  // 0. Once daily EVENING / OD evening / 0-0-1.
   // MUST be tested before the OD/morning branch below: "Once Daily (Evening)"
-  // contains "once daily", so the generic OD rule would otherwise win and silently
-  // reschedule the evening dose to 08:00 AM.
+  // contains "once daily", so the generic OD rule would otherwise win.
   const isEveningOnly =
-    (text.includes('evening') || text.includes('night') || text.includes('pm')) &&
+    (text.includes('evening') || text.includes('night') || text.includes('pm') || text.includes('शाम')) &&
     !text.includes('bedtime') &&
-    !text.includes('hs');
+    !text.includes('hs') &&
+    !text.includes('सोते समय');
 
-  if (isEveningOnly && (text.includes('od') || text.includes('0-0-1') || text.includes('once daily'))) {
+  if (isEveningOnly && (text.includes('od') || text.includes('0-0-1') || text.includes('once daily') || text.includes('शाम'))) {
     return {
       frequency: 'Once Daily (Evening)',
       frequencyCode: 'OD',
       triggerSlot: '08:00 PM Daily',
-      instruction: '1 tablet every evening after dinner'
+      instruction: '1 tablet every evening after dinner (शाम को खाने के बाद)'
     };
   }
 
-  // Once daily / Morning / OD / 1-0-0
+  // 1. As Needed / SOS / PRN (including Hindi / Hinglish)
   if (
-    text.includes('od') ||
-    text.includes('1-0-0') ||
-    text.includes('0-1-0') ||
-    text.includes('0-0-1') ||
-    text.includes('once daily') ||
-    text.includes('daily morn') ||
-    text.includes('qd') ||
-    text.includes('qam') ||
-    text.includes('morning')
-  ) {
-    return {
-      frequency: 'Once Daily (Morning)',
-      frequencyCode: 'OD',
-      triggerSlot: '08:00 AM Daily',
-      instruction: '1 tablet every morning after breakfast'
-    };
-  }
-
-  // Twice daily / BD / BID / 1-0-1
-  if (
-    text.includes('bd') ||
-    text.includes('bid') ||
-    text.includes('1-0-1') ||
-    text.includes('twice daily') ||
-    text.includes('twice a day') ||
-    text.includes('b.d.')
-  ) {
-    return {
-      frequency: 'Twice Daily (Morning & Night)',
-      frequencyCode: 'BD',
-      triggerSlot: '08:30 AM & 08:30 PM',
-      instruction: '1 tablet twice daily immediately after morning and evening meals'
-    };
-  }
-
-  // Thrice daily / TDS / TID / 1-1-1
-  if (
-    text.includes('tds') ||
-    text.includes('tid') ||
-    text.includes('1-1-1') ||
-    text.includes('thrice daily') ||
-    text.includes('three times')
-  ) {
-    return {
-      frequency: 'Thrice Daily (Morning, Afternoon, Night)',
-      frequencyCode: 'TDS',
-      triggerSlot: '08:00 AM, 02:00 PM & 08:30 PM',
-      instruction: '1 tablet three times a day post meals'
-    };
-  }
-
-  // Bedtime / HS / Night / 0-0-1 (HS)
-  if (
-    text.includes('hs') ||
-    text.includes('bedtime') ||
-    text.includes('night') ||
-    text.includes('sote samay') ||
-    text.includes('qhs')
-  ) {
-    return {
-      frequency: 'At Bedtime (Night)',
-      frequencyCode: 'HS',
-      triggerSlot: '10:00 PM Bedtime',
-      instruction: '1 tablet once daily at bedtime with warm water'
-    };
-  }
-
-  // As Needed / SOS / PRN
-  if (
+    /\b(sos|prn|as needed|when required|emergency|acute pain|zaroorat|dard hone par)\b/i.test(text) ||
+    /जरूरत पड़ने पर|दर्द होने पर|दर्द में|जब जरूरत हो/.test(text) ||
     text.includes('sos') ||
-    text.includes('prn') ||
-    text.includes('as needed') ||
-    text.includes('pain') ||
-    text.includes('emergency')
+    text.includes('prn')
   ) {
     return {
       frequency: 'As Needed (SOS)',
       frequencyCode: 'SOS',
       triggerSlot: 'On-Demand (SOS Trigger)',
-      instruction: 'Take only when experiencing acute pain or symptoms'
+      instruction: 'Take only when experiencing acute symptoms or pain (जरूरत पड़ने पर)'
     };
   }
 
-  // Once Weekly / QWK
-  if (text.includes('weekly') || text.includes('qwk') || text.includes('sunday')) {
+  // 2. Once Weekly / QWK (including Hindi)
+  if (
+    /\b(weekly|qwk|sunday|once a week|every week|hafha|ravivar)\b/i.test(text) ||
+    /हफ्ते में एक बार|हर रविवार|साप्ताहिक/.test(text)
+  ) {
     return {
       frequency: 'Once Weekly',
       frequencyCode: 'QWK',
       triggerSlot: 'Every Sunday 09:00 AM',
-      instruction: '1 dose once weekly every Sunday with milk'
+      instruction: '1 dose once weekly every Sunday (हफ्ते में एक बार)'
     };
   }
 
-  // Four times / QID / 1-1-1-1
-  if (text.includes('qid') || text.includes('1-1-1-1') || text.includes('four times')) {
+  // 3. Monthly (including Hindi)
+  if (
+    /\b(monthly|cycle|per month|mahina)\b/i.test(text) ||
+    /महीने में एक बार|मासिक/.test(text)
+  ) {
+    return {
+      frequency: 'Monthly Recurring Cycle',
+      frequencyCode: 'MONTHLY',
+      triggerSlot: '18th of Every Month',
+      instruction: 'Recurring monthly cycle'
+    };
+  }
+
+  // 4. Four Times Daily / QID / 1-1-1-1 (including Hindi)
+  if (
+    /\b(qid|1-1-1-1|four times|4 times|din me char baar)\b/i.test(text) ||
+    /दिन में चार बार|4 बार/.test(text)
+  ) {
     return {
       frequency: 'Four Times Daily',
       frequencyCode: 'QID',
       triggerSlot: '08:00 AM, 12:00 PM, 04:00 PM & 08:30 PM',
-      instruction: '1 dose every 6 hours'
+      instruction: '1 dose four times daily every 6 hours'
+    };
+  }
+
+  // 5. Thrice Daily / TDS / TID / 1-1-1 (including Hindi)
+  if (
+    /\b(tds|tid|1-1-1|thrice|three times|3 times|din me teen baar|subah dopahar raat)\b/i.test(text) ||
+    /दिन में तीन बार|सुबह दोपहर रात|3 बार/.test(text)
+  ) {
+    return {
+      frequency: 'Thrice Daily (Morning, Afternoon, Night)',
+      frequencyCode: 'TDS',
+      triggerSlot: '08:00 AM, 02:00 PM & 08:30 PM',
+      instruction: '1 tablet three times a day post meals (सुबह, दोपहर और रात)'
+    };
+  }
+
+  // 6. Twice Daily / BD / BID / 1-0-1 / Morning & Night / Hindi (1 गोली सुबह नाश्ते के बाद, 1 रात को)
+  if (
+    /\b(bd|bid|1-0-1|twice|two times|2 times|b\.d\.|b\.i\.d\.|din me do baar|subah aur raat|subah sham)\b/i.test(text) ||
+    /morning\s*(?:&|and)\s*(?:night|evening)/i.test(text) ||
+    /breakfast\s*(?:&|and)\s*dinner/i.test(text) ||
+    /दिन में दो बार|2 बार|सुबह और रात|सुबह शाम|सुबह नाश्ते के बाद.*रात|1 गोली सुबह.*1 रात/.test(text)
+  ) {
+    const slotMatch = rawInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
+    return {
+      frequency: 'Twice Daily (Morning & Night)',
+      frequencyCode: 'BD',
+      triggerSlot: slotMatch ? slotMatch[1] : '08:30 AM Tomorrow',
+      instruction: '1 tablet twice daily immediately after morning and evening meals (1 गोली सुबह, 1 रात को)'
+    };
+  }
+
+  // 7. Evening / Night / Bedtime / HS / QHS / QD (Night) / OD (Night) / 0-0-1 / Hindi (रात को / सोते समय)
+  if (
+    /\b(hs|qhs|bedtime|night|evening|dinner|sote samay|raat ko|0-0-1)\b/i.test(text) ||
+    /qd\s*\(night\)/i.test(text) ||
+    /od\s*\(night\)/i.test(text) ||
+    /qd\s*\(evening\)/i.test(text) ||
+    /od\s*\(evening\)/i.test(text) ||
+    /रात को|सोते समय|रात में|डिनर के बाद|शाम को/.test(text) ||
+    text.includes('evening') ||
+    text.includes('night') ||
+    text.includes('bedtime')
+  ) {
+    const slotMatch = rawInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
+    const isEveningOnly = (text.includes('evening') || text.includes('शाम')) && !text.includes('bedtime') && !text.includes('hs') && !text.includes('सोते समय');
+    return {
+      frequency: isEveningOnly ? 'Once Daily (Evening)' : 'At Bedtime (Night)',
+      frequencyCode: 'HS',
+      triggerSlot: slotMatch ? slotMatch[1] : (isEveningOnly ? '09:00 PM Today' : '10:00 PM Tonight'),
+      instruction: isEveningOnly
+        ? '1 tablet once daily in the evening before/after dinner (शाम को खाने के बाद)'
+        : '1 tablet once daily at bedtime with warm water (रात को सोते समय)'
+    };
+  }
+
+  // 8. Once Daily (Morning) / OD / QD / QAM / 1-0-0 / Hindi (सुबह नाश्ते के बाद)
+  if (
+    /\b(od|qd|qam|1-0-0|0-1-0|morning|breakfast|once daily|daily morn|subah|nashta|khali pet)\b/i.test(text) ||
+    /सुबह|नाश्ते के बाद|खाली पेट|1 गोली सुबह|दिन में एक बार/.test(text) ||
+    text.includes('morning') ||
+    text.includes('od') ||
+    text.includes('qd')
+  ) {
+    const slotMatch = rawInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
+    return {
+      frequency: 'Once Daily (Morning)',
+      frequencyCode: 'OD',
+      triggerSlot: slotMatch ? slotMatch[1] : '08:00 AM Daily',
+      instruction: '1 tablet every morning after breakfast (सुबह नाश्ते के बाद)'
     };
   }
 
@@ -171,10 +190,11 @@ export function normalizeFrequency(rawInput: string): NormalizedFrequency {
   }
 
   // Default fallback
+  const fallbackSlot = rawInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
   return {
     frequency: 'Once Daily (Morning)',
     frequencyCode: 'OD',
-    triggerSlot: '08:00 AM Daily',
+    triggerSlot: fallbackSlot ? fallbackSlot[1] : '08:00 AM Daily',
     instruction: 'Take 1 dose as directed by physician'
   };
 }
@@ -419,9 +439,9 @@ export function parseUploadedDocument(
         frequency: 'At Bedtime (Night)',
         frequencyCode: 'HS',
         instruction: '1 tablet once daily at bedtime for lipid management',
-        triggerSlot: '09:00 PM Tonight',
+        triggerSlot: '09:00 PM Today',
         confidenceScore: 0.98,
-        rawOcrText: 'Tab. Rosuvastatin 10mg (At Bedtime)',
+        rawOcrText: 'Tab. Rosuvastatin 10mg QD (Night)',
         sourceBox: { top: 38, left: 12, width: 76, height: 8 },
         status: 'verified'
       },
@@ -432,10 +452,10 @@ export function parseUploadedDocument(
         category: 'Diabetes',
         frequency: 'Twice Daily (Morning & Night)',
         frequencyCode: 'BD',
-        instruction: '1 tablet twice daily after meals for blood glucose regulation',
+        instruction: '1 tablet twice daily after meals for blood glucose control',
         triggerSlot: '08:30 AM Tomorrow',
         confidenceScore: 0.99,
-        rawOcrText: 'Tab. Metformin XR 1000mg (Twice Daily)',
+        rawOcrText: 'Tab. Metformin XR 1000mg BID (Post Meals)',
         sourceBox: { top: 50, left: 12, width: 76, height: 8 },
         status: 'verified'
       }

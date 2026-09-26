@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   PhoneCall, PhoneMissed, AlertOctagon, Zap, X,
-  ShieldAlert, Pill, RotateCcw
+  ShieldAlert, Pill, RotateCcw, ShoppingBag
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -10,6 +10,7 @@ export const DemoSimulatorBar: React.FC = () => {
   const {
     triggerSimulateMorningCall,
     triggerSimulateMissedCall,
+    triggerSimulateRefillNeeded,
     triggerSimulateDistressAlert,
     triggerSimulateUnapprovedPayment,
     triggerSimulateDosageChangeAttempt,
@@ -18,10 +19,11 @@ export const DemoSimulatorBar: React.FC = () => {
 
   const [isOpen, setIsOpen] = useState(false);
 
-  const demoBtn = (onClick: () => void, icon: React.ReactNode, title: string, subtitle: string, variant: 'green' | 'amber' | 'red' | 'neutral') => {
+  const demoBtn = (onClick: () => void, icon: React.ReactNode, title: string, subtitle: string, variant: 'green' | 'amber' | 'red' | 'blue' | 'neutral') => {
     const colors = {
       green:   { bg: 'var(--success-soft)', hover: '#bde0c6', border: 'var(--success-soft)', color: 'var(--success)' },
       amber:   { bg: 'var(--review-soft)', hover: '#f5d996', border: 'var(--review-soft)', color: 'var(--review-text)' },
+      blue:    { bg: '#e8f0fe', hover: '#d2e3fc', border: '#d2e3fc', color: '#1a73e8' },
       red:     { bg: 'var(--soft-accent-tint)', hover: '#edd9b2', border: 'var(--soft-accent-tint)', color: 'var(--terracotta)' },
       neutral: { bg: 'var(--surface-muted)', hover: '#e2dfd5', border: 'var(--border-light)', color: 'var(--text-ink)' },
     }[variant];
@@ -76,10 +78,11 @@ export const DemoSimulatorBar: React.FC = () => {
               </button>
             </div>
 
-            <span className="mono" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Happy Path</span>
-            {demoBtn(() => triggerSimulateMorningCall(), <PhoneCall size={16} />, 'Simulate Morning Call', 'Logs 42s Hindi call & moves to Done', 'green')}
-            {demoBtn(() => triggerSimulateMissedCall(), <PhoneMissed size={16} />, 'Simulate Missed Call', 'Flags 2 unanswered attempts', 'amber')}
-            {demoBtn(() => triggerSimulateDistressAlert(), <AlertOctagon size={16} />, 'Simulate Distress Alert', '"Chakkar aa raha hai" red banner', 'red')}
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>IVR Call Outcomes</span>
+            {demoBtn(() => triggerSimulateMorningCall(), <PhoneCall size={16} />, '1. Dose Taken (हाँ, खा ली)', 'Logs 42s Hindi call & moves to Done', 'green')}
+            {demoBtn(() => triggerSimulateMissedCall(), <PhoneMissed size={16} />, '2. Dose Missed (नहीं खाई)', 'Flags 2 unanswered attempts', 'amber')}
+            {demoBtn(() => triggerSimulateRefillNeeded(), <ShoppingBag size={16} />, '3. Stock Out (ख़त्म हो गई)', 'Auto-drafts Chemist WhatsApp order', 'blue')}
+            {demoBtn(() => triggerSimulateDistressAlert(), <AlertOctagon size={16} />, '4. Distress (तबियत खराब)', '"Chakkar aa raha hai" red banner', 'red')}
 
             <div style={{ borderTop: '1px solid var(--border-light)', margin: '4px 0' }} />
 

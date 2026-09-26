@@ -94,6 +94,7 @@ interface AppContextType {
   // Demo & Guardrail Simulator Triggers (Phase 3 Tasks 3.1t & 3.2t)
   triggerSimulateMorningCall: () => void;
   triggerSimulateMissedCall: () => void;
+  triggerSimulateRefillNeeded: () => void;
   triggerSimulateDistressAlert: () => void;
   triggerSimulateUnapprovedPayment: () => void;
   triggerSimulateDosageChangeAttempt: () => void;
@@ -242,9 +243,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const mapped = {
         id: item.id,
         medicineName: item.name,
-        dosage: item.dosage || '5 mg',
-        frequency: normalized.frequency,
-        frequencyCode: normalized.frequencyCode,
+        dosage: item.dosage || '10mg',
+        frequency: item.frequency || normalized.frequency,
+        frequencyCode: item.frequencyCode || normalized.frequencyCode,
         instruction: item.instruction || normalized.instruction,
         nextTriggerTime: item.triggerSlot || normalized.triggerSlot,
         confidence: item.confidenceScore,
@@ -860,6 +861,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const triggerSimulateRefillNeeded = () => {
+    playSound('ping');
+    const chemist = activeParent.vendors.chemist;
+
+    addEventLog({
+      agentSource: 'Sarvam Caller Agent',
+      eventType: 'STOCK_OUT_REFILL_INTENT_DETECTED',
+      severity: 'info',
+      details: `${activeParent.name} reported medication stock finished. Generated auto-draft WhatsApp refill order for ${chemist.name}.`,
+      payload: {
+        parent: activeParent.name,
+        chemist: chemist.name,
+        action: 'WHATSAPP_DRAFT_CREATED'
+      }
+    });
+
+    addToast({
+      type: 'info',
+      title: 'Chemist Refill Order Drafted',
+      message: `Refill needed for ${activeParent.name.split(' ')[0]}. WhatsApp order queued for ${chemist.name}.`
+    });
+  };
+
   const triggerSimulateDistressAlert = () => {
     playSound('emergency');
     const distressFlag: CriticalFlag = {
@@ -1032,6 +1056,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         approvePrescriptionSchedule,
         triggerSimulateMorningCall,
         triggerSimulateMissedCall,
+        triggerSimulateRefillNeeded,
         triggerSimulateDistressAlert,
         triggerSimulateUnapprovedPayment,
         triggerSimulateDosageChangeAttempt,
