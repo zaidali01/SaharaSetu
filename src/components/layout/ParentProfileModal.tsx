@@ -1,13 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
-  MapPin, 
-  Languages, 
-  Activity, 
-  Store,
-  Zap,
-  Flame
+import {
+  X, MapPin, Languages, Activity, Store, Zap, Flame
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -18,58 +12,49 @@ export const ParentProfileModal: React.FC = () => {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+      <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 15 }}
+          initial={{ opacity: 0, scale: 0.96, y: 12 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          exit={{ opacity: 0, scale: 0.96, y: 12 }}
+          style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 48px rgba(0,0,0,0.18)', border: '1px solid var(--card-border)', width: '100%', maxWidth: 640, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}
         >
           {/* Header */}
-          <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-lg">
-                👴
-              </div>
+          <div style={{ padding: '16px 24px', background: 'var(--sidebar-bg)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--sidebar-hover)', border: '1px solid var(--sidebar-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>👴</div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold">{activeParent.name}</h3>
-                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600 }}>{activeParent.name}</h3>
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}>
                     Age {activeParent.age} • {activeParent.relation}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-teal-400" />
-                  <span>{activeParent.address}, {activeParent.city} ({activeParent.pincode})</span>
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <MapPin size={12} /> {activeParent.address}, {activeParent.city} ({activeParent.pincode})
                 </p>
               </div>
             </div>
-
-            <button
-              type="button"
-              aria-label="Close profile modal"
-              onClick={() => setIsParentProfileOpen(false)}
-              className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
+            <button onClick={() => setIsParentProfileOpen(false)} style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <X size={16} />
             </button>
           </div>
 
-          <div className="p-6 overflow-y-auto space-y-5 text-xs">
-            {/* Quick Switcher */}
-            <div className="flex items-center justify-between bg-slate-100 p-2 rounded-xl">
-              <span className="font-semibold text-slate-700 ml-2">Switch Monitored Parent:</span>
-              <div className="flex gap-2">
-                {parents.map((parent) => (
+          <div style={{ padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16, fontSize: 13 }}>
+            {/* Switcher */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--content-bg)', padding: '8px 12px', borderRadius: 10 }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: 12 }}>Switch Monitored Parent:</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {parents.map(parent => (
                   <button
                     key={parent.id}
-                    type="button"
                     onClick={() => setActiveParent(parent)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      activeParent.id === parent.id
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'bg-white text-slate-700 hover:bg-slate-200'
-                    }`}
+                    style={{
+                      padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all 0.12s',
+                      background: activeParent.id === parent.id ? 'var(--sidebar-bg)' : '#fff',
+                      color: activeParent.id === parent.id ? '#fff' : 'var(--text-secondary)',
+                      boxShadow: activeParent.id === parent.id ? 'none' : '0 1px 3px rgba(0,0,0,0.06)',
+                    }}
                   >
                     {parent.name} ({parent.location.split(',')[0]})
                   </button>
@@ -77,125 +62,83 @@ export const ParentProfileModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Vitals Summary Card */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-900 flex items-center gap-1.5">
-                  <Activity className="w-4 h-4 text-teal-600" />
-                  Latest Health Vitals (Recorded via Voice Check-in)
+            {/* Vitals */}
+            <div style={{ padding: 16, borderRadius: 12, border: '1px solid var(--card-border)', background: 'var(--content-bg)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Activity size={14} color="var(--accent)" /> Latest Health Vitals
                 </span>
-                <span className="text-[11px] text-slate-500 font-mono">
-                  {activeParent.vitals.lastChecked}
-                </span>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{activeParent.vitals.lastChecked}</span>
               </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs text-center">
-                  <span className="text-[10px] uppercase font-medium text-slate-500">Blood Pressure</span>
-                  <p className="text-sm font-bold text-slate-900 mt-0.5">{activeParent.vitals.bloodPressure}</p>
-                </div>
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs text-center">
-                  <span className="text-[10px] uppercase font-medium text-slate-500">Fasting Sugar</span>
-                  <p className="text-sm font-bold text-slate-900 mt-0.5">{activeParent.vitals.bloodSugarFasting}</p>
-                </div>
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs text-center">
-                  <span className="text-[10px] uppercase font-medium text-slate-500">Pulse Rate</span>
-                  <p className="text-sm font-bold text-slate-900 mt-0.5">{activeParent.vitals.pulseRate}</p>
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                {[
+                  { label: 'Blood Pressure', value: activeParent.vitals.bloodPressure },
+                  { label: 'Fasting Sugar', value: activeParent.vitals.bloodSugarFasting },
+                  { label: 'Pulse Rate', value: activeParent.vitals.pulseRate },
+                ].map((v, i) => (
+                  <div key={i} style={{ background: '#fff', padding: 10, borderRadius: 8, border: '1px solid var(--card-border)', textAlign: 'center' }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{v.label}</span>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{v.value}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Language & Voice Telephony Config */}
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
-              <span className="font-semibold text-slate-900 flex items-center gap-1.5">
-                <Languages className="w-4 h-4 text-indigo-600" />
-                Sarvam Voice Agent Localization
+            {/* Language */}
+            <div style={{ padding: 16, borderRadius: 12, border: '1px solid var(--card-border)', background: 'var(--content-bg)' }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Languages size={14} color="var(--blue-600)" /> Sarvam Voice Agent Localization
               </span>
-              <p className="text-slate-600">
-                Primary IVR Dialect: <strong>{activeParent.preferredLanguage}</strong> with native colloquial fluency in <strong>{activeParent.secondaryLanguage}</strong>.
-              </p>
-              <div className="flex gap-2 pt-1 flex-wrap">
+              <p style={{ color: 'var(--text-secondary)' }}>Primary: <strong>{activeParent.preferredLanguage}</strong> with fluency in <strong>{activeParent.secondaryLanguage}</strong>.</p>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 {activeParent.dialects.map((d, i) => (
-                  <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-800 text-[11px] font-semibold rounded border border-indigo-200">
+                  <span key={i} style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: '#ede9fe', color: '#6d28d9', border: '1px solid #ddd6fe' }}>
                     {d} Acoustic Model v2
                   </span>
                 ))}
               </div>
             </div>
 
-            {/* Local Vendor Bindings */}
-            <div className="space-y-2">
-              <span className="font-semibold text-slate-900 uppercase tracking-wider text-[11px]">
-                Grounded Local Vendor Registry
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {/* Chemist */}
-                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
-                  <div className="flex items-center gap-1.5 text-teal-700 font-semibold">
-                    <Store className="w-3.5 h-3.5" />
-                    <span>Pharmacy</span>
-                  </div>
-                  <p className="font-medium text-slate-900">{activeParent.vendors.chemist.name}</p>
-                  <p className="text-slate-500 text-[11px]">{activeParent.vendors.chemist.area}</p>
-                  <p className="text-slate-600 font-mono text-[10px]">{activeParent.vendors.chemist.phone}</p>
-                </div>
-
-                {/* LPG */}
-                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
-                  <div className="flex items-center gap-1.5 text-amber-700 font-semibold">
-                    <Flame className="w-3.5 h-3.5" />
-                    <span>LPG Gas</span>
-                  </div>
-                  <p className="font-medium text-slate-900">{activeParent.vendors.lpg.provider}</p>
-                  <p className="text-slate-500 text-[11px]">{activeParent.vendors.lpg.agency}</p>
-                  <p className="text-slate-600 font-mono text-[10px]">Ref: {activeParent.vendors.lpg.consumerNo}</p>
-                </div>
-
-                {/* Electricity */}
-                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
-                  <div className="flex items-center gap-1.5 text-indigo-700 font-semibold">
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Electricity (BBPS)</span>
-                  </div>
-                  <p className="font-medium text-slate-900">{activeParent.vendors.electricity.provider}</p>
-                  <p className="text-slate-500 text-[11px]">Auto-Mandate active</p>
-                  <p className="text-slate-600 font-mono text-[10px]">ID: {activeParent.vendors.electricity.consumerId}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Emergency Contacts */}
-            <div className="space-y-2">
-              <span className="font-semibold text-slate-900 uppercase tracking-wider text-[11px]">
-                Emergency Escalation Tree
-              </span>
-              <div className="space-y-2">
-                {activeParent.emergencyContacts.map((contact, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between"
-                  >
-                    <div>
-                      <span className="font-semibold text-slate-900">{contact.name}</span>
-                      <span className="text-slate-500 ml-2 font-normal">({contact.relation} • {contact.location})</span>
+            {/* Vendors */}
+            <div>
+              <span style={{ fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', fontSize: 11, letterSpacing: '0.06em' }}>Grounded Local Vendor Registry</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 10 }}>
+                {[
+                  { icon: <Store size={14} />, label: 'Pharmacy', name: activeParent.vendors.chemist.name, sub: activeParent.vendors.chemist.area, detail: activeParent.vendors.chemist.phone, color: 'var(--accent)' },
+                  { icon: <Flame size={14} />, label: 'LPG Gas', name: activeParent.vendors.lpg.provider, sub: activeParent.vendors.lpg.agency, detail: `Ref: ${activeParent.vendors.lpg.consumerNo}`, color: 'var(--amber-600)' },
+                  { icon: <Zap size={14} />, label: 'Electricity', name: activeParent.vendors.electricity.provider, sub: 'Auto-Mandate active', detail: `ID: ${activeParent.vendors.electricity.consumerId}`, color: 'var(--blue-600)' },
+                ].map((v, i) => (
+                  <div key={i} style={{ padding: 12, background: '#fff', borderRadius: 10, border: '1px solid var(--card-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: v.color, marginBottom: 6, fontSize: 12 }}>
+                      {v.icon} {v.label}
                     </div>
-                    <span className="font-mono text-slate-700 font-medium">{contact.phone}</span>
+                    <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{v.name}</p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 11 }}>{v.sub}</p>
+                    <p className="mono" style={{ color: 'var(--text-muted)', fontSize: 10, marginTop: 2 }}>{v.detail}</p>
                   </div>
                 ))}
               </div>
             </div>
 
+            {/* Emergency Contacts */}
+            <div>
+              <span style={{ fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', fontSize: 11, letterSpacing: '0.06em' }}>Emergency Escalation Tree</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                {activeParent.emergencyContacts.map((c, i) => (
+                  <div key={i} style={{ padding: 12, background: '#fff', borderRadius: 10, border: '1px solid var(--card-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</span>
+                      <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>({c.relation} • {c.location})</span>
+                    </div>
+                    <span className="mono" style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: 12 }}>{c.phone}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Footer */}
-          <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
-            <button
-              type="button"
-              onClick={() => setIsParentProfileOpen(false)}
-              className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium rounded-lg cursor-pointer"
-            >
-              Done
-            </button>
+          <div style={{ padding: '12px 24px', borderTop: '1px solid var(--card-border)', display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={() => setIsParentProfileOpen(false)} className="btn-primary">Done</button>
           </div>
         </motion.div>
       </div>

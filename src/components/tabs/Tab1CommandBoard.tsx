@@ -3,40 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2, Clock, Play, Check, MessageSquare, Zap, Pill,
   PhoneCall, ShoppingBag, PhoneForwarded, Layers, ChevronRight,
-  ShieldCheck, CheckCircle, FileSearch, Activity, RefreshCw
+  ShieldCheck, FileSearch, RefreshCw, ArrowRight
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-
-/* ─── Shared card style ─────────────────────────────────── */
-const C = {
-  dark:     'var(--color-forest-depths)',
-  surface:  'var(--color-moss-shadow)',
-  border:   'var(--color-moss-shadow)',
-  sprout:   'var(--color-electric-sprout)',
-  sage:     'var(--color-lichen-sage)',
-  white:    'var(--color-pure-white)',
-  bone:     'var(--color-bone-white)',
-  onyx:     'var(--color-onyx-olive)',
-  fern:     'var(--color-pale-fern)',
-  wash:     'var(--color-sprout-wash)',
-};
-
-const colWell: React.CSSProperties = {
-  background: 'rgba(39,63,43,0.28)',
-  border: '1px solid rgba(39,63,43,0.6)',
-  borderRadius: 20,
-  padding: 16,
-  minHeight: 600,
-};
-
-const taskCard: React.CSSProperties = {
-  background: 'rgba(18,35,20,0.85)',
-  border: '1px solid var(--color-moss-shadow)',
-  borderRadius: 16,
-  padding: 16,
-  cursor: 'grab',
-  backdropFilter: 'blur(8px)',
-};
 
 export const Tab1CommandBoard: React.FC = () => {
   const {
@@ -44,308 +13,271 @@ export const Tab1CommandBoard: React.FC = () => {
     setActiveTranscriptTask, setActiveWhatsAppTask,
     setActiveChemistModalTask, setActiveAuditTask,
     activeParent, backendStatus, refreshFromBackend,
+    setIsGuardrailsOpen,
   } = useApp();
 
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const filteredTasks = tasks.filter(t => categoryFilter === 'all' || t.category === categoryFilter);
-  const doneTasks           = filteredTasks.filter(t => t.column === 'done');
-  const needsApprovalTasks  = filteredTasks.filter(t => t.column === 'needs_approval');
-  const blockedTasks        = filteredTasks.filter(t => t.column === 'blocked');
-  const pendingFunds        = needsApprovalTasks.reduce((acc, t) => acc + (t.amount || 0), 0);
+  const doneTasks          = filteredTasks.filter(t => t.column === 'done');
+  const needsApprovalTasks = filteredTasks.filter(t => t.column === 'needs_approval');
+  const blockedTasks       = filteredTasks.filter(t => t.column === 'blocked');
 
-  const getCategoryIcon = (category: string) => {
+  const getCategoryLabel = (category: string) => {
     switch (category) {
-      case 'medication': return <Pill size={14} color="var(--color-electric-sprout)" />;
-      case 'utility':    return <Zap size={14} color="#f59e0b" />;
-      case 'chemist':    return <ShoppingBag size={14} color="var(--color-electric-sprout)" />;
-      case 'checkin':    return <PhoneCall size={14} color="#ef4444" />;
-      default:           return <Layers size={14} color="var(--color-lichen-sage)" />;
+      case 'medication': return 'Medicine Refill';
+      case 'utility':    return 'Utility Bill';
+      case 'chemist':    return 'Document Intake';
+      case 'checkin':    return 'System Blocker';
+      default:           return 'Task';
     }
   };
 
-  const filters = [
-    { id: 'all', label: 'All Tasks' },
-    { id: 'medication', label: 'Medications' },
-    { id: 'chemist', label: 'Chemist' },
-    { id: 'utility', label: 'Utilities' },
-    { id: 'checkin', label: 'Voice Calls' },
-  ];
-
   return (
-    <div style={{ paddingBottom: 80 }}>
-
+    <div>
       {/* ── Page Header ── */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 700, color: C.white, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-            Command <span style={{ color: C.sprout }}>Board</span>
-          </h1>
-          <span className="badge badge-sage" style={{ fontSize: 11 }}>Tasks 4.3–4.5</span>
+      <div className="page-header">
+        <div>
+          <p className="page-breadcrumb">Operations / Command Board</p>
+          <h1 className="page-title">Operational Command Center</h1>
         </div>
-        <p style={{ color: C.sage, fontSize: 14 }}>
-          Live operations for <strong style={{ color: C.white }}>{activeParent.name}</strong> · {activeParent.city || 'Patna'} · {activeParent.preferredLanguage || 'Hindi'}
-        </p>
-      </div>
-
-      {/* ── KPI Strip ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: 12,
-        marginBottom: 24,
-      }}>
-        {[
-          { label: 'Completed Today', value: `${doneTasks.length} done`, sub: `+1 confirmed`, icon: <CheckCircle size={16} color={C.sprout} />, accent: C.sprout },
-          { label: 'Awaiting Sign-off', value: `₹${pendingFunds > 0 ? pendingFunds.toFixed(0) : '1,252'}`, sub: `${needsApprovalTasks.length} in queue`, icon: <ShieldCheck size={16} color="#f59e0b" />, accent: '#f59e0b' },
-          { label: 'Next Check-in', value: `8:00 PM`, sub: 'Dinner Call · Sarvam IVR', icon: <Activity size={16} color={C.sprout} />, accent: C.sprout },
-        ].map((stat, i) => (
-          <div key={i} style={{ ...taskCard, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 18px' }}>
-            <div>
-              <span style={{ fontSize: 11, fontWeight: 500, color: C.sage, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block' }}>{stat.label}</span>
-              <span style={{ fontSize: 18, fontWeight: 700, color: C.white, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>{stat.value}</span>
-              <span style={{ fontSize: 12, color: C.sage }}>{stat.sub}</span>
-            </div>
-            <div style={{ width: 38, height: 38, borderRadius: 10, border: `1px solid ${stat.accent}30`, background: `${stat.accent}10`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              {stat.icon}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Filter bar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {filters.map(f => (
-            <button
-              key={f.id}
-              onClick={() => setCategoryFilter(f.id)}
-              style={{
-                padding: '5px 14px',
-                borderRadius: 'var(--radius-pill)',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: 'pointer',
-                border: categoryFilter === f.id ? 'none' : '1px solid var(--color-moss-shadow)',
-                background: categoryFilter === f.id ? C.sprout : 'transparent',
-                color: categoryFilter === f.id ? C.onyx : C.sage,
-                transition: 'all 0.15s',
-              }}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="page-actions">
+          <button
+            onClick={() => setIsGuardrailsOpen(true)}
+            className="status-pill active"
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green-600)', flexShrink: 0 }} />
+            Guardrails Active
+          </button>
+          <button
+            onClick={() => refreshFromBackend()}
+            className="status-pill"
+          >
+            <RefreshCw size={13} />
+            Sync live data
+          </button>
         </div>
-
-        <button
-          onClick={() => refreshFromBackend()}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--color-moss-shadow)', background: 'transparent', color: C.sage, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}
-        >
-          <RefreshCw size={12} />
-          Sync · {backendStatus === 'connected' ? 'Live' : 'Cached'}
-        </button>
       </div>
 
-      {/* ── Tri-column Kanban ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, alignItems: 'start' }}>
+      {/* ── Stats Row ── */}
+      <div className="stats-row">
+        <div className="stat-card">
+          <p className="stat-label">Completed Today</p>
+          <p className="stat-value">{String(doneTasks.length).padStart(2, '0')}</p>
+          <p className="stat-sub green">+2 since 09:00 AM</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-label">Awaiting Sign-Off</p>
+          <p className="stat-value">{String(needsApprovalTasks.length).padStart(2, '0')}</p>
+          <p className="stat-sub amber">Priority focus required</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-label">Blocked Actions</p>
+          <p className="stat-value">{String(blockedTasks.length).padStart(2, '0')}</p>
+          <p className="stat-sub muted">Pharmacy stock issue</p>
+        </div>
+      </div>
 
-        {/* ─ COLUMN 1: Done & Verified ─ */}
-        <div style={colWell}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.sprout, display: 'inline-block' }} />
-              <span style={{ fontWeight: 600, fontSize: 12, color: C.fern, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Done & Verified</span>
-            </div>
-            <span className="badge badge-sprout">{doneTasks.length}</span>
+      {/* ── Kanban Board ── */}
+      <div className="kanban-grid">
+
+        {/* ── Column 1: Done & Verified ── */}
+        <div className="kanban-column">
+          <div className="kanban-column-header">
+            <span className="kanban-column-title">Done & Verified</span>
+            <span className="kanban-column-badge green">VER: {String(doneTasks.length).padStart(2, '0')}</span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <AnimatePresence>
-              {doneTasks.map(task => (
-                <motion.div key={task.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} style={taskCard}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                    <div style={{ display: 'flex', gap: 10, flex: 1 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(104,239,63,0.1)', border: '1px solid rgba(104,239,63,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
-                        {getCategoryIcon(task.category)}
-                      </div>
-                      <div>
-                        <h4 style={{ fontSize: 14, fontWeight: 600, color: C.white, lineHeight: 1.3 }}>{task.title}</h4>
-                        {task.subtitle && <p style={{ fontSize: 12, color: C.sage, marginTop: 2 }}>{task.subtitle}</p>}
-                      </div>
-                    </div>
-                    <span className="badge badge-sprout" style={{ fontSize: 10, flexShrink: 0 }}>
-                      <CheckCircle2 size={10} /> {task.badgeText || 'Done'}
+          <AnimatePresence>
+            {doneTasks.map(task => (
+              <motion.div
+                key={task.id}
+                layout
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                className="task-card"
+              >
+                <div className="task-card-header">
+                  <span className="task-card-category">{getCategoryLabel(task.category)}</span>
+                  <span className="task-card-time">{task.time || '8:15 AM'}</span>
+                </div>
+                <h4 className="task-card-title">{task.title}</h4>
+                {task.subtitle && <p className="task-card-subtitle">{task.subtitle}</p>}
+
+                {task.verificationMethod && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--card-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="badge-inline verified">Verified by Agent</span>
+                    <button
+                      onClick={() => setActiveAuditTask(task)}
+                      className="btn-ghost"
+                    >
+                      Details
+                    </button>
+                  </div>
+                )}
+
+                {task.amount && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--card-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                    <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>Auto-paid successfully</span>
+                    <span className="btn-ghost" onClick={() => setActiveAuditTask(task)}>Details</span>
+                  </div>
+                )}
+
+                {task.transcript && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--card-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Clock size={11} /> {task.transcript.duration} min IVR
                     </span>
-                  </div>
-
-                  {task.verificationMethod && (
-                    <div style={{ background: 'rgba(39,63,43,0.5)', border: '1px solid var(--color-moss-shadow)', borderRadius: 10, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
-                      <span style={{ color: C.fern }}>{task.verificationMethod}</span>
-                      <span style={{ color: C.sage, fontFamily: 'var(--font-mono)', fontSize: 11 }}>{task.time}</span>
-                    </div>
-                  )}
-
-                  {task.amount && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, paddingTop: 8, borderTop: '1px solid var(--color-moss-shadow)' }}>
-                      <span style={{ color: C.sage }}>Auto-Mandate BBPS:</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: C.white }}>₹{task.amount.toFixed(2)}</span>
-                    </div>
-                  )}
-
-                  {task.transcript && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid var(--color-moss-shadow)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.sage, fontSize: 12 }}>
-                        <Clock size={12} /> {task.transcript.duration} min IVR
-                      </div>
-                      <button
-                        onClick={() => setActiveTranscriptTask(task)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 8, background: 'rgba(104,239,63,0.1)', border: '1px solid rgba(104,239,63,0.2)', color: C.sprout, fontSize: 12, cursor: 'pointer' }}
-                      >
-                        <Play size={10} fill="currentColor" /> Listen
-                      </button>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {/* ─ COLUMN 2: Needs Approval ─ */}
-        <div style={colWell}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
-              <span style={{ fontWeight: 600, fontSize: 12, color: C.fern, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Needs Approval</span>
-            </div>
-            <span className="badge badge-amber">{needsApprovalTasks.length} Pending</span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <AnimatePresence>
-              {needsApprovalTasks.map(task => (
-                <motion.div key={task.id} layout initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, y: -16 }} style={taskCard}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                    <div style={{ display: 'flex', gap: 10, flex: 1 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
-                        {getCategoryIcon(task.category)}
-                      </div>
-                      <div>
-                        <h4 style={{ fontSize: 14, fontWeight: 600, color: C.white, lineHeight: 1.3 }}>{task.title}</h4>
-                        {task.subtitle && <p style={{ fontSize: 12, color: C.sage, marginTop: 2 }}>{task.subtitle}</p>}
-                      </div>
-                    </div>
-                    <span className="badge badge-amber" style={{ fontSize: 10, flexShrink: 0 }}>{task.badgeText || 'Sign-off'}</span>
-                  </div>
-
-                  {task.amount && (
-                    <div style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 10 }}>
-                      <span style={{ color: C.sage }}>Order Amount:</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: C.white, fontSize: 15 }}>₹{task.amount.toFixed(2)}</span>
-                    </div>
-                  )}
-
-                  {task.whatsappDraft && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <button onClick={() => setActiveWhatsAppTask(task)} style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.sprout, fontSize: 12, background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                        <MessageSquare size={13} /> Preview WhatsApp Draft <ChevronRight size={12} />
-                      </button>
-                      <button onClick={() => setActiveAuditTask(task)} style={{ fontSize: 11, color: C.sage, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <FileSearch size={11} /> Audit
-                      </button>
-                    </div>
-                  )}
-
-                  {task.bookingDetails && (
-                    <div style={{ background: 'rgba(39,63,43,0.5)', border: '1px solid var(--color-moss-shadow)', borderRadius: 10, padding: '8px 12px', fontSize: 12, marginBottom: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ color: C.sage }}>Consumer ID:</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', color: C.white, fontWeight: 600 }}>{task.bookingDetails.consumerNumber}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: C.sage }}>Due:</span>
-                        <span style={{ color: '#f59e0b', fontWeight: 500 }}>{task.bookingDetails.dueDate}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', gap: 8, paddingTop: 10, borderTop: '1px solid var(--color-moss-shadow)' }}>
-                    <button onClick={() => rejectTask(task.id)} className="btn-danger" style={{ flex: 1, justifyContent: 'center', fontSize: 12, padding: '7px 12px' }}>
-                      Reject
-                    </button>
-                    <button onClick={() => approveTask(task.id)} className="btn-primary" style={{ flex: 2, justifyContent: 'center', fontSize: 12, padding: '7px 14px', borderRadius: 8 }}>
-                      <Check size={13} /> {task.category === 'chemist' ? 'Approve & Dispatch' : 'Approve'}
+                    <button
+                      onClick={() => setActiveTranscriptTask(task)}
+                      className="btn-ghost"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      <Play size={10} fill="currentColor" /> Listen
                     </button>
                   </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {needsApprovalTasks.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '40px 20px', border: '1px dashed var(--color-moss-shadow)', borderRadius: 14, color: C.sage, fontSize: 13 }}>
-                ✨ Approval queue clear
-              </div>
-            )}
-          </div>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
 
-        {/* ─ COLUMN 3: Blocked ─ */}
-        <div style={colWell}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
-              <span style={{ fontWeight: 600, fontSize: 12, color: C.fern, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Couldn't Complete</span>
-            </div>
-            <span className="badge badge-red">{blockedTasks.length} Issues</span>
+        {/* ── Column 2: Needs Approval ── */}
+        <div className="kanban-column">
+          <div className="kanban-column-header">
+            <span className="kanban-column-title">Needs Approval</span>
+            <span className="kanban-column-badge amber">REQ: {String(needsApprovalTasks.length).padStart(2, '0')}</span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <AnimatePresence>
-              {blockedTasks.map(task => (
-                <motion.div key={task.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={taskCard}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                    <div style={{ display: 'flex', gap: 10, flex: 1 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
-                        {getCategoryIcon(task.category)}
-                      </div>
-                      <div>
-                        <h4 style={{ fontSize: 14, fontWeight: 600, color: C.white, lineHeight: 1.3 }}>{task.title}</h4>
-                        {task.subtitle && <p style={{ fontSize: 12, color: C.sage, marginTop: 2 }}>{task.subtitle}</p>}
-                      </div>
-                    </div>
-                    <span className="badge badge-red" style={{ fontSize: 10, flexShrink: 0 }}>{task.badgeText || 'Blocked'}</span>
-                  </div>
+          <AnimatePresence>
+            {needsApprovalTasks.map(task => (
+              <motion.div
+                key={task.id}
+                layout
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, y: -12 }}
+                className="task-card"
+              >
+                <div className="task-card-header">
+                  <span className="task-card-category">{getCategoryLabel(task.category)}</span>
+                  <span className="badge-inline manual-signoff">{task.badgeText || 'Manual Sign-Off'}</span>
+                </div>
+                <h4 className="task-card-title">{task.title}</h4>
+                {task.subtitle && <p className="task-card-subtitle">{task.subtitle}</p>}
 
-                  {task.blockerDetails && (
-                    <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '8px 12px', fontSize: 12, marginBottom: 10 }}>
-                      <p style={{ color: C.fern, lineHeight: 1.5, marginBottom: 6 }}>{task.blockerDetails.reason}</p>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.sage, fontFamily: 'var(--font-mono)', paddingTop: 6, borderTop: '1px solid rgba(239,68,68,0.15)' }}>
-                        <span>Attempts: {task.blockerDetails.attempts}</span>
-                        <span>{task.blockerDetails.lastAttemptTime}</span>
-                      </div>
+                {/* Amount + Confidence row */}
+                {task.amount && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
+                    <div className="detail-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                      <span className="detail-label">Total Amount</span>
+                      <span className="detail-value amount">₹{task.amount.toFixed(2)}</span>
                     </div>
+                    <div className="detail-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                      <span className="detail-label">Confidence</span>
+                      <span className="detail-value">98% Indic</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Prescription mini preview */}
+                {task.whatsappDraft && (
+                  <div className="prescription-mini" style={{ marginTop: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      <span>Dr. S. K. Verma</span>
+                      <span>Verma Clinic</span>
+                    </div>
+                    <div>Rx: Amlodipine 5mg (1-0-0), Metformin 500mg (1-0-1), Atorvastatin 10mg (0-0-1)...</div>
+                  </div>
+                )}
+
+                {task.bookingDetails && (
+                  <div style={{ marginTop: 10 }}>
+                    <div className="detail-row" style={{ marginBottom: 6 }}>
+                      <span className="detail-label">Consumer ID</span>
+                      <span className="detail-value mono" style={{ fontSize: 12 }}>{task.bookingDetails.consumerNumber}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Due Date</span>
+                      <span style={{ color: 'var(--amber-600)', fontWeight: 600, fontSize: 12 }}>{task.bookingDetails.dueDate}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                  <button onClick={() => approveTask(task.id)} className="btn-approve">
+                    Approve
+                  </button>
+                  <button onClick={() => rejectTask(task.id)} className="btn-reject">
+                    Reject
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {needsApprovalTasks.length === 0 && (
+            <div className="empty-state">✨ Approval queue clear</div>
+          )}
+        </div>
+
+        {/* ── Column 3: Blocked / Issues ── */}
+        <div className="kanban-column">
+          <div className="kanban-column-header">
+            <span className="kanban-column-title">Blocked / Issues</span>
+            <span className="kanban-column-badge red">ISSUE: {String(blockedTasks.length).padStart(2, '0')}</span>
+          </div>
+
+          <AnimatePresence>
+            {blockedTasks.map(task => (
+              <motion.div
+                key={task.id}
+                layout
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="task-card"
+              >
+                <div className="task-card-header">
+                  <span className="task-card-category">{getCategoryLabel(task.category)}</span>
+                  <span className="badge-inline stock-out">{task.badgeText || 'Stock Out'}</span>
+                </div>
+                <h4 className="task-card-title">{task.title}</h4>
+                {task.subtitle && <p className="task-card-subtitle">{task.subtitle}</p>}
+
+                {task.blockerDetails && (
+                  <div className="recommendation-box">
+                    <p className="recommendation-label">Recommendation</p>
+                    <p className="recommendation-text">{task.blockerDetails.reason}</p>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 12 }}>
+                  {task.category === 'chemist' && (
+                    <button
+                      onClick={() => setActiveChemistModalTask(task)}
+                      className="btn-danger-fill"
+                    >
+                      Find alternate chemist <ArrowRight size={14} />
+                    </button>
                   )}
+                  {task.category === 'checkin' && (
+                    <button
+                      onClick={() => setActiveAuditTask(task)}
+                      className="btn-danger-fill"
+                    >
+                      <PhoneForwarded size={14} /> Trigger Emergency Ping
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
 
-                  <div style={{ paddingTop: 10, borderTop: '1px solid var(--color-moss-shadow)' }}>
-                    {task.category === 'chemist' && (
-                      <button onClick={() => setActiveChemistModalTask(task)} className="btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 12, padding: '7px 14px', borderRadius: 8 }}>
-                        <ShoppingBag size={13} /> Find Alternate Chemist
-                      </button>
-                    )}
-                    {task.category === 'checkin' && (
-                      <button onClick={() => setActiveAuditTask(task)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: 12, cursor: 'pointer' }}>
-                        <PhoneForwarded size={13} /> Trigger Emergency Ping
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {blockedTasks.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '40px 20px', border: '1px dashed var(--color-moss-shadow)', borderRadius: 14, color: C.sage, fontSize: 13 }}>
-                🎉 No blockers
-              </div>
-            )}
-          </div>
+          {blockedTasks.length === 0 && (
+            <div className="empty-state">🎉 No blockers</div>
+          )}
         </div>
 
       </div>
