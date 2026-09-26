@@ -13,8 +13,30 @@ const { matchMedicineResponse, matchGasResponse } = require('./matcher');
 const { escalate } = require('./escalate');
 const { placeCall } = require('./place_call');
 
+
+async function reportOutcome(taskId, callStatus, transcript, parentResponse) {
+  if (!taskId) return;
+  try {
+    const res = await fetch("http://localhost:4000/api/calls/outcome", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskId,
+        callId: "twilio-" + Date.now(),
+        callStatus,
+        transcript,
+        parentResponse,
+      })
+    });
+    console.log("[BACKEND-SYNC] Outcome reported, status:", res.status);
+  } catch (err) {
+    console.error("[BACKEND-SYNC] Failed to report outcome:", err.message);
+  }
+}
+
 const app = express();
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
 app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
 
 const PORT = process.env.PORT || 3000;
@@ -194,6 +216,17 @@ app.post('/call-status', async (req, res) => {
   }
 
   res.sendStatus(200);
+});
+
+
+app.post("/api/trigger-call", async (req, res) => {
+  try {
+    const { taskId, phone } = req.body;
+    const call = await placeCall(1, phone, taskId);
+    res.json({ success: true, callSid: call.sid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => {

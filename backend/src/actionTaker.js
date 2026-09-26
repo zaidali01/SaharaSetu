@@ -115,8 +115,39 @@ async function processCallOutcome(outcome) {
 async function dispatchMedicineOrder(task, callId, transcript, parentResponse) {
   console.log(`[ACTION] Dispatching medicine order for task ${task.id}`);
 
-  // TODO (Task 3.5): Send WhatsApp message to chemist via WhatsApp Business API
-  // const waResult = await sendWhatsAppMessage({ to: vendor.phone, body: messageBody });
+  // Fetch the chemist phone from vendors
+  const { rows } = await pool.query("SELECT * FROM vendors WHERE parent_id = $1 AND vendor_type = 'chemist' LIMIT 1", [task.parent_id]);
+  const chemistPhone = rows.length > 0 ? rows[0].phone : null;
+
+  // 2.5i: Wire Action-Taker output into WhatsApp message sends
+  if (chemistPhone) {
+    try {
+      const waToken = process.env.WHATSAPP_TOKEN;
+      const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+      
+      if (waToken && phoneId) {
+        // Send real WhatsApp message if configured
+        await fetch(`https://graph.facebook.com/v17.0/${phoneId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${waToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: chemistPhone.replace('+', ''), // Strip + for WhatsApp API
+            type: 'text',
+            text: { body: `New order request from SaharaSetu for task ${task.id}. Parent confirms medicine required.` }
+          })
+        });
+        console.log(`[ACTION] WhatsApp message dispatched to chemist at ${chemistPhone}`);
+      } else {
+        console.log(`[ACTION] WhatsApp Sandbox not configured yet. MOCK sending order to ${chemistPhone}.`);
+      }
+    } catch (err) {
+      console.error(`[ACTION] Failed to send WhatsApp message:`, err.message);
+    }
+  }
 
   await logAction({
     taskId: task.id,
@@ -127,7 +158,8 @@ async function dispatchMedicineOrder(task, callId, transcript, parentResponse) {
     payload: {
       task_type: task.task_type,
       parent_response: parentResponse,
-      note: 'WhatsApp integration pending (Task 3.5)',
+      chemistPhone,
+      note: 'WhatsApp integration wired (Task 2.5i)',
     },
   });
 
