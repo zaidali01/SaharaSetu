@@ -1,19 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Cpu, 
-  PhoneCall, 
-  Database, 
-  Send, 
-  Terminal, 
-  Copy, 
-  Check, 
-  Pause, 
-  Play, 
-  ArrowRight, 
-  Zap, 
-  ChevronDown, 
-  ChevronUp 
+import {
+  Cpu, PhoneCall, Database, Send, Terminal, Copy, Check,
+  Pause, Play, ArrowRight, Zap, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { EventLogItem } from '../../data/mockData';
@@ -26,12 +15,8 @@ export const Tab3AgentTrace: React.FC = () => {
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState<boolean>(true);
   const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
 
-  const selectedNode = agentNodes.find((n) => n.id === selectedNodeId) || agentNodes[0];
-
-  const filteredLogs = eventLogs.filter((log) => {
-    if (selectedSeverity === 'all') return true;
-    return log.severity === selectedSeverity;
-  });
+  const selectedNode = agentNodes.find(n => n.id === selectedNodeId) || agentNodes[0];
+  const filteredLogs = eventLogs.filter(log => selectedSeverity === 'all' || log.severity === selectedSeverity);
 
   const handleCopyJson = (log: EventLogItem) => {
     navigator.clipboard.writeText(JSON.stringify(log.payload, null, 2));
@@ -40,116 +25,102 @@ export const Tab3AgentTrace: React.FC = () => {
   };
 
   const getNodeIcon = (type: string) => {
+    const color = 'var(--terracotta)';
     switch (type) {
-      case 'voice_telephony':
-        return <PhoneCall className="w-5 h-5 text-teal-400" />;
-      case 'state_engine':
-        return <Database className="w-5 h-5 text-indigo-400" />;
-      case 'execution_layer':
-        return <Send className="w-5 h-5 text-emerald-400" />;
-      default:
-        return <Cpu className="w-5 h-5 text-teal-400" />;
+      case 'voice_telephony': return <PhoneCall size={18} color={color} />;
+      case 'state_engine':    return <Database size={18} color={color} />;
+      case 'execution_layer': return <Send size={18} color={color} />;
+      default:                return <Cpu size={18} color={color} />;
+    }
+  };
+
+  const logBg = (severity: string) => {
+    switch (severity) {
+      case 'critical': return { bg: 'var(--soft-accent-tint)', border: 'var(--terracotta)', label: 'var(--terracotta)' };
+      case 'warning':  return { bg: 'var(--review-soft)', border: 'var(--mustard)', label: 'var(--review-text)' };
+      case 'success':  return { bg: 'var(--success-soft)', border: 'var(--success)', label: 'var(--success)' };
+      default:         return { bg: '#fff', border: 'var(--border-light)', label: 'var(--text-ink)' };
     }
   };
 
   return (
-    <div className="space-y-6 pb-24">
-      
-      {/* Top Banner */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {/* ── Page Header ── */}
+      <div className="page-header-container">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-slate-900 tracking-tight">
-              Multi-Agent Telephony & Action Pipeline Trace
-            </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-              Task 4.6 Multi-Agent Trace
-            </span>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Real-time execution telemetry for <strong>{activeParent.name}</strong> ({activeParent.city}) connecting Sarvam Indic ASR, Postgres Guardrail State Machine, and WhatsApp/UPI Execution.
+          <p className="page-breadcrumb">Operations / Agent Trace</p>
+          <h1 className="page-title">Multi-Agent Pipeline Trace</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+            Real-time telemetry for <strong>{activeParent.name}</strong> ({activeParent.city}) · Sarvam ASR → State Engine → WhatsApp/UPI
           </p>
         </div>
-
-        <div className="flex items-center gap-2 bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-mono">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Sarvam AI: Transcribing {activeParent.language.split('/')[0]} audio stream...</span>
+        <div className="page-actions">
+          <span className="status-chip active">
+            <Zap size={13} />
+            Pipeline Active
+          </span>
+          <span className="status-chip mono" style={{ fontSize: 11 }}>
+            End-to-End: 612ms
+          </span>
         </div>
       </div>
 
-      {/* Dark Observability Console Container */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6 text-white">
-        
-        {/* Console Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-            <Zap className="w-4 h-4 text-teal-400" />
-            Autonomous Agent Nodes & State Flow ({activeParent.name.split(' ')[0]})
-          </span>
-          <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2.5 py-0.5 rounded-full">
-            End-to-End Latency: 612 ms
+      {/* ── Agent nodes ── */}
+      <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 16, borderBottom: '1px solid var(--border-light)', marginBottom: 20 }}>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Zap size={14} color="var(--terracotta)" /> Autonomous Agent Nodes · {activeParent.name.split(' ')[0]}
           </span>
         </div>
 
-        {/* 3 Connected Agents Grid with Flow Connectors */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
-          
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, position: 'relative' }}>
           {agentNodes.map((node, index) => {
             const isSelected = selectedNodeId === node.id;
-
             return (
-              <div key={node.id} className="relative flex flex-col">
-                {/* Node Card */}
+              <div key={node.id} style={{ position: 'relative' }}>
                 <motion.div
-                  whileHover={{ scale: 1.02 }}
+                  whileHover={{ scale: 1.01 }}
                   onClick={() => setSelectedNodeId(node.id)}
-                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative ${
-                    isSelected
-                      ? 'border-teal-400 bg-slate-950 shadow-[0_0_20px_rgba(45,212,191,0.2)] ring-2 ring-teal-500/30'
-                      : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
-                  }`}
+                  style={{
+                    padding: 20,
+                    borderRadius: 'var(--radius-md)',
+                    border: isSelected ? '1px solid var(--terracotta)' : '1px solid var(--border-light)',
+                    background: isSelected ? 'var(--soft-accent-tint)' : '#fff',
+                    cursor: 'pointer', transition: 'all 0.15s',
+                    boxShadow: isSelected ? 'none' : '0 1px 3px rgba(36,51,43,0.03)'
+                  }}
                 >
-                  {/* Active Status Ring & Pulse */}
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center">
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-md)', background: 'var(--surface-muted)', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {getNodeIcon(node.type)}
                       </div>
                       <div>
-                        <span className="text-[10px] font-mono font-bold text-teal-400 uppercase">
-                          Node 0{index + 1}
-                        </span>
-                        <h4 className="text-sm font-semibold text-white tracking-tight">
-                          {node.name}
-                        </h4>
+                        <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--terracotta)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Node 0{index + 1}</span>
+                        <h4 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>{node.name}</h4>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/80 text-[10px] font-mono">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      <span>Active</span>
-                    </div>
+                    <span className="badge badge-success" style={{ padding: '2px 6px', fontSize: 10 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }} /> Active
+                    </span>
                   </div>
 
-                  {/* Subtitle & Provider */}
-                  <div className="mt-3 space-y-1">
-                    <p className="text-xs text-slate-300 font-semibold">{node.shortName}</p>
-                    <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                      {node.activeDescription}
-                    </p>
-                  </div>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-ink)', marginBottom: 4 }}>{node.shortName}</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>{node.activeDescription}</p>
 
-                  {/* Node Telemetry Footer */}
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono text-slate-400">
-                    <span>Latency: <strong className="text-teal-300">{node.latencyMs}ms</strong></span>
-                    <span className="text-indigo-300">Inspect ➔</span>
+                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Latency: <strong className="mono" style={{ color: 'var(--terracotta)' }}>{node.latencyMs}ms</strong></span>
+                    <span style={{ color: 'var(--terracotta)', fontWeight: 600 }}>Inspect →</span>
                   </div>
                 </motion.div>
 
-                {/* Flow Connector Arrow for Desktop */}
                 {index < agentNodes.length - 1 && (
-                  <div className="hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-slate-800 border border-slate-700 items-center justify-center text-teal-400 shadow-md pointer-events-none">
-                    <ArrowRight className="w-4 h-4 animate-pulse" />
+                  <div style={{ display: 'flex', position: 'absolute', right: -24, top: '50%', transform: 'translateY(-50%)', zIndex: 10, width: 32, height: 32, borderRadius: '50%', background: '#fff', border: '1px solid var(--border-light)', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(36,51,43,0.08)', pointerEvents: 'none' }}>
+                    <ArrowRight size={14} color="var(--terracotta)" />
                   </div>
                 )}
               </div>
@@ -157,147 +128,113 @@ export const Tab3AgentTrace: React.FC = () => {
           })}
         </div>
 
-        {/* Selected Node Telemetry Deep Dive Inspector */}
-        <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-4.5 space-y-3 font-mono text-xs">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
-            <div className="flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-teal-400" />
-              <span className="font-bold text-white uppercase text-[11px]">
-                Active Node Payload: {selectedNode.name}
+        {/* Node inspector */}
+        <div className="card" style={{ marginTop: 24, padding: 20, background: 'var(--surface-secondary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid var(--border-light)', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Terminal size={16} color="var(--terracotta)" />
+              <span className="mono" style={{ fontWeight: 700, color: 'var(--text-ink)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Active Node: {selectedNode?.name}
               </span>
-              <span className="text-[10px] bg-slate-800 text-teal-300 px-2 py-0.5 rounded">
-                Model: {selectedNode.model}
-              </span>
+              <span className="mono" style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--card-bg)', border: '1px solid var(--border-light)', color: 'var(--text-muted)' }}>{selectedNode?.model}</span>
             </div>
-
-            <button
-              onClick={() => setIsJsonDrawerOpen(!isJsonDrawerOpen)}
-              className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
-            >
-              <span>{isJsonDrawerOpen ? 'Collapse' : 'Expand'}</span>
-              {isJsonDrawerOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            <button onClick={() => setIsJsonDrawerOpen(!isJsonDrawerOpen)} className="btn btn-ghost">
+              {isJsonDrawerOpen ? 'Collapse' : 'Expand'}
+              {isJsonDrawerOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
           </div>
 
           {isJsonDrawerOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="space-y-3"
-            >
-              <div className="p-3 bg-slate-900/90 rounded-lg border border-slate-800 text-[11px] text-slate-300 leading-relaxed font-sans">
-                <strong className="text-teal-400 font-mono">System Prompt Constraint: </strong>
-                {selectedNode.systemPromptSummary}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ overflow: 'hidden' }}>
+              <div style={{ padding: 16, background: '#fff', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', fontSize: 14, color: 'var(--text-ink)', lineHeight: 1.6, marginBottom: 16 }}>
+                <strong style={{ color: 'var(--terracotta)' }}>System Constraint: </strong>
+                {selectedNode?.systemPromptSummary}
               </div>
-
-              <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 overflow-x-auto">
-                <pre className="text-[11px] text-emerald-400 leading-relaxed">
-                  {JSON.stringify(selectedNode.lastPayload, null, 2)}
+              <div style={{ padding: 16, background: 'var(--sidebar-bg)', borderRadius: 'var(--radius-md)', overflowX: 'auto' }}>
+                <pre className="mono" style={{ fontSize: 12, color: 'var(--text-on-dark)', lineHeight: 1.6 }}>
+                  {JSON.stringify(selectedNode?.lastPayload, null, 2)}
                 </pre>
               </div>
             </motion.div>
           )}
         </div>
+      </div>
 
-        {/* Real-time Streaming Event Log Terminal */}
-        <div className="space-y-3 pt-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">
-                Live State & Execution Event Log
-              </span>
-              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded">
-                ● Immutable Audit Hash Chain Active
-              </span>
-            </div>
-
-            {/* Filter Chips & Stream Pause Toggle */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center bg-slate-950 p-0.5 rounded-lg text-[10px] font-mono border border-slate-800">
-                {['all', 'info', 'success', 'warning', 'critical'].map((sev) => (
-                  <button
-                    key={sev}
-                    onClick={() => setSelectedSeverity(sev)}
-                    className={`px-2 py-0.5 rounded capitalize transition-colors cursor-pointer ${
-                      selectedSeverity === sev
-                        ? 'bg-teal-500/20 text-teal-300 font-bold'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {sev}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setIsLogStreaming(!isLogStreaming)}
-                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-mono text-slate-300 flex items-center gap-1 cursor-pointer"
-              >
-                {isLogStreaming ? <Pause className="w-3 h-3 text-amber-400" /> : <Play className="w-3 h-3 text-emerald-400" />}
-                <span>{isLogStreaming ? 'Pause' : 'Resume'}</span>
-              </button>
-            </div>
+      {/* ── Event log ── */}
+      <div className="card" style={{ padding: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 16, borderBottom: '1px solid var(--border-light)', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)' }} />
+            <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-ink)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Live Execution Log
+            </span>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>({filteredLogs.length} Events)</span>
           </div>
 
-          {/* Event Stream Terminal Window */}
-          <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 font-mono text-xs">
-            {filteredLogs.map((log) => {
-              const isCopied = copiedLogId === log.id;
-              const auditMeta = (log.payload as any)?._audit;
-
-              return (
-                <div
-                  key={log.id}
-                  className={`p-3 rounded-xl border transition-all flex items-start justify-between gap-3 ${
-                    log.severity === 'critical'
-                      ? 'bg-rose-950/40 border-rose-800/80 text-rose-200'
-                      : log.severity === 'warning'
-                      ? 'bg-amber-950/30 border-amber-800/70 text-amber-200'
-                      : log.severity === 'success'
-                      ? 'bg-emerald-950/30 border-emerald-800/60 text-emerald-200'
-                      : 'bg-slate-950/80 border-slate-800 text-slate-300'
-                  }`}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', background: 'var(--surface-muted)', borderRadius: 'var(--radius-sm)', padding: 4, gap: 4 }}>
+              {['all', 'info', 'success', 'warning', 'critical'].map(sev => (
+                <button
+                  key={sev}
+                  onClick={() => setSelectedSeverity(sev)}
+                  style={{
+                    padding: '6px 12px', borderRadius: 'var(--radius-sm)', fontSize: 12, cursor: 'pointer', border: 'none',
+                    background: selectedSeverity === sev ? '#fff' : 'transparent',
+                    color: selectedSeverity === sev ? 'var(--text-ink)' : 'var(--text-muted)',
+                    fontWeight: selectedSeverity === sev ? 600 : 500,
+                    textTransform: 'capitalize', transition: 'all 0.15s',
+                    boxShadow: selectedSeverity === sev ? '0 1px 3px rgba(36,51,43,0.06)' : 'none',
+                  }}
                 >
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] text-slate-500">{log.timestamp}</span>
-                      {auditMeta?.sequence && (
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-amber-300 border border-slate-700 font-bold">
-                          #{auditMeta.sequence}
-                        </span>
-                      )}
-                      <span className="px-1.5 py-0.2 rounded bg-slate-800 text-teal-300 text-[10px] font-bold">
-                        {log.agentSource}
-                      </span>
-                      <span className="text-white font-bold">{log.eventType}</span>
-                    </div>
-                    <p className="text-[11px] font-sans text-slate-200 leading-relaxed">
-                      {log.details}
-                    </p>
-                    {auditMeta?.hash && (
-                      <div className="text-[9px] text-slate-500 font-mono pt-0.5 flex items-center gap-1">
-                        <span className="text-emerald-500/70 font-semibold">Integrity Sig:</span>
-                        <span>{auditMeta.hash}</span>
-                      </div>
-                    )}
-                  </div>
+                  {sev}
+                </button>
+              ))}
+            </div>
 
-                  <button
-                    onClick={() => handleCopyJson(log)}
-                    className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
-                    title="Copy event payload JSON"
-                  >
-                    {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              );
-            })}
+            <button onClick={() => setIsLogStreaming(!isLogStreaming)} className="btn btn-outline" style={{ padding: '8px 14px', fontSize: 12 }}>
+              {isLogStreaming ? <Pause size={14} /> : <Play size={14} />}
+              {isLogStreaming ? 'Pause Stream' : 'Resume Stream'}
+            </button>
           </div>
         </div>
 
-      </div>
+        <div style={{ maxHeight: 480, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filteredLogs.map(log => {
+            const isCopied = copiedLogId === log.id;
+            const colors = logBg(log.severity);
+            return (
+              <div
+                key={log.id}
+                style={{
+                  padding: '12px 16px', borderRadius: 'var(--radius-md)',
+                  border: `1px solid ${colors.border}`, background: colors.bg,
+                  display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{log.timestamp}</span>
+                    <span className="mono" style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: '#fff', border: `1px solid ${colors.border}`, color: colors.label, fontWeight: 700 }}>
+                      {log.agentSource}
+                    </span>
+                    <span style={{ fontSize: 13, color: 'var(--text-ink)', fontWeight: 700 }}>{log.eventType}</span>
+                  </div>
+                  <p style={{ fontSize: 13, color: 'var(--text-ink)', lineHeight: 1.5 }}>{log.details}</p>
+                </div>
 
-    </div>
+                <button
+                  onClick={() => handleCopyJson(log)}
+                  title="Copy event payload JSON"
+                  className="btn btn-ghost"
+                  style={{ padding: 8, flexShrink: 0 }}
+                >
+                  {isCopied ? <Check size={16} color="var(--success)" /> : <Copy size={16} />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </motion.div>
   );
 };

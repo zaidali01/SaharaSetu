@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppProvider, useApp } from './context/AppContext';
-import { Navbar } from './components/layout/Navbar';
+import { Sidebar } from './components/layout/Sidebar';
 import { GuardrailsModal } from './components/layout/GuardrailsModal';
 import { AlertsDrawer } from './components/layout/AlertsDrawer';
 import { ParentProfileModal } from './components/layout/ParentProfileModal';
@@ -20,58 +20,60 @@ const DashboardContent: React.FC = () => {
   const { activeTab } = useApp();
 
   return (
-    <div className="min-h-screen text-slate-900 flex flex-col selection:bg-slate-900 selection:text-white">
-      {/* Global Navigation Bar */}
-      <Navbar />
+    <div className="dashboard-layout">
+      {/* Fixed sidebar */}
+      <Sidebar />
 
-      {/* Main Container Across All Tabs with Viewport Hardening */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <AnimatePresence mode="wait">
-          {activeTab === 'command_board' && (
-            <motion.div
-              key="tab1"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.18 }}
-            >
-              <Tab1CommandBoard />
-            </motion.div>
-          )}
+      {/* Main content area */}
+      <main className="main-content">
+        <div className="content-inner">
+          <AnimatePresence mode="wait">
+            {activeTab === 'command_board' && (
+              <motion.div
+                key="tab1"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+              >
+                <Tab1CommandBoard />
+              </motion.div>
+            )}
 
-          {activeTab === 'document_intake' && (
-            <motion.div
-              key="tab2"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.18 }}
-            >
-              <Tab2DocumentIntake />
-            </motion.div>
-          )}
+            {activeTab === 'document_intake' && (
+              <motion.div
+                key="tab2"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+              >
+                <Tab2DocumentIntake />
+              </motion.div>
+            )}
 
-          {activeTab === 'agent_trace' && (
-            <motion.div
-              key="tab3"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.18 }}
-            >
-              <Tab3AgentTrace />
-            </motion.div>
-          )}
-        </AnimatePresence>
+            {activeTab === 'agent_trace' && (
+              <motion.div
+                key="tab3"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+              >
+                <Tab3AgentTrace />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </main>
 
-      {/* Stage Demo Simulator (Fail-Safe Dock) */}
+      {/* Demo Simulator dock */}
       <DemoSimulatorBar />
 
-      {/* Toast Notifications System */}
+      {/* Toast notifications */}
       <ToastContainer />
 
-      {/* Modal Dialogs & Drawers */}
+      {/* Modals & Drawers */}
       <GuardrailsModal />
       <AlertsDrawer />
       <ParentProfileModal />

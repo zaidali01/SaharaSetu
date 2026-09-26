@@ -1,675 +1,286 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  UploadCloud, 
-  ShieldAlert, 
-  CheckCircle2, 
-  Sparkles, 
-  Clock, 
-  ArrowRight, 
-  ShieldCheck, 
-  ScanLine,
-  FileText,
-  Zap,
-  Check,
-  Key,
-  X,
-  Plus,
-  Trash2
+import {
+  UploadCloud, ShieldAlert, CheckCircle2, Sparkles, Clock, ArrowRight,
+  ShieldCheck, ScanLine, FileText, Plus
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PrescriptionCanvas } from '../prescription/PrescriptionCanvas';
 import { playSound } from '../../utils/audio';
-import { getActiveGeminiApiKey, setActiveGeminiApiKey } from '../../services/geminiVision';
 
 export const Tab2DocumentIntake: React.FC = () => {
-  const { 
-    prescriptionItems, 
-    setPrescriptionItems, 
-    approvePrescriptionSchedule, 
-    selectedRxId, 
-    setSelectedRxId,
-    activeParent,
-    documents,
-    activeDocument,
-    setActiveDocument,
-    uploadDocument,
-    isOcrProcessing
+  const {
+    prescriptionItems, setPrescriptionItems, approvePrescriptionSchedule,
+    selectedRxId, setSelectedRxId, activeParent, documents, activeDocument,
+    setActiveDocument, uploadDocument, isOcrProcessing, backendStatus,
   } = useApp();
 
-  const [activeDocId, setActiveDocId] = useState<'verma' | 'roy' | 'sbpdcl' | 'custom'>('verma');
   const [isDragging, setIsDragging] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
 
-  // Gemini API Key in-app configurator
-  const [geminiKey, setGeminiKey] = useState<string>(getActiveGeminiApiKey() || '');
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [tempKey, setTempKey] = useState('');
+  const handleFrequencyChange = (id: string, newFreq: string) =>
+    setPrescriptionItems(prev => prev.map(item => item.id === id ? { ...item, frequency: newFreq } : item));
 
-  const handleSaveApiKey = () => {
-    setActiveGeminiApiKey(tempKey);
-    setGeminiKey(tempKey.trim());
-    setIsKeyModalOpen(false);
-    playSound('approval');
-  };
+  const handleNameChange = (id: string, newName: string) =>
+    setPrescriptionItems(prev => prev.map(item => item.id === id ? { ...item, medicineName: newName } : item));
 
-  // Sync activeDocId with activeDocument if updated externally
-  React.useEffect(() => {
-    if (activeDocument.id === 'doc-1') setActiveDocId('verma');
-    else if (activeDocument.id === 'doc-2') setActiveDocId('roy');
-    else if (activeDocument.id === 'doc-3') setActiveDocId('sbpdcl');
-    else setActiveDocId('custom');
-  }, [activeDocument.id]);
-
-  // 3 Sample Presets
-  const samplePresets: {
-    id: 'verma' | 'roy' | 'sbpdcl';
-    docId: string;
-    label: string;
-    icon: React.ElementType;
-    badge: string;
-  }[] = [
-    {
-      id: 'verma',
-      docId: 'doc-1',
-      label: 'Sample 1: Dr. S.K. Verma (Cardio / BP)',
-      icon: FileText,
-      badge: 'Cardio Rx'
-    },
-    {
-      id: 'roy',
-      docId: 'doc-2',
-      label: 'Sample 2: Dr. Anita Roy (Ortho / Joint Care)',
-      icon: FileText,
-      badge: 'Ortho Rx'
-    },
-    {
-      id: 'sbpdcl',
-      docId: 'doc-3',
-      label: 'Sample 3: SBPDCL Electricity Bill',
-      icon: Zap,
-      badge: 'Utility Bill'
-    }
-  ];
-
-  const handleSelectPreset = (presetKey: 'verma' | 'roy' | 'sbpdcl', docId: string) => {
-    setActiveDocId(presetKey);
-    const doc = documents.find(d => d.id === docId);
-    if (doc) {
-      playSound('ping');
-      setActiveDocument(doc);
-    }
-  };
-
-  const handleFrequencyChange = (id: string, newFreq: string) => {
-    setPrescriptionItems(prev =>
-      prev.map(item => (item.id === id ? { ...item, frequency: newFreq } : item))
-    );
-  };
-
-  const handleNameChange = (id: string, newName: string) => {
-    setPrescriptionItems(prev =>
-      prev.map(item => (item.id === id ? { ...item, medicineName: newName } : item))
-    );
-  };
-
-  const handleDosageChange = (id: string, newDosage: string) => {
-    setPrescriptionItems(prev =>
-      prev.map(item => (item.id === id ? { ...item, dosage: newDosage } : item))
-    );
-  };
-
-  const handleTriggerTimeChange = (id: string, newTime: string) => {
-    setPrescriptionItems(prev =>
-      prev.map(item => (item.id === id ? { ...item, nextTriggerTime: newTime } : item))
-    );
-  };
-
-  const handleAddItem = () => {
-    const newItem = {
-      id: `rx-manual-${Date.now()}`,
-      medicineName: 'Tab. New Medication',
-      dosage: '10mg',
-      category: 'General',
-      frequency: 'Once Daily (Morning)',
-      frequencyCode: 'OD',
-      instruction: '1 dose once daily as directed',
-      nextTriggerTime: '08:00 AM Tomorrow',
-      confidence: 0.99,
-      rawOcrText: 'Tab. New Medication 10mg OD',
-      sourceBox: { top: 38 + prescriptionItems.length * 12, left: 12, width: 76, height: 8 },
-      status: 'verified' as const
-    };
-    setPrescriptionItems(prev => [...prev, newItem]);
-    setSelectedRxId(newItem.id);
-    playSound('ping');
-  };
-
-  const handleDeleteItem = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPrescriptionItems(prev => prev.filter(item => item.id !== id));
-    playSound('ping');
-  };
-
-  // Instant File Preview + Asynchronous Vision OCR Pipeline
-  const handleProcessUploadedFile = async (fileOrName: File | { name: string; previewImageUrl?: string } | string) => {
-    setActiveDocId('custom');
-    setIsScanning(true);
-    setScanProgress(20);
-    playSound('ping');
-
-    let previewUrl = '';
-    const fileName = typeof fileOrName === 'string' ? fileOrName : fileOrName.name;
-    const isFileInstance = typeof window !== 'undefined' && fileOrName instanceof File;
-
-    if (isFileInstance) {
-      previewUrl = URL.createObjectURL(fileOrName as File);
-    } else if (typeof fileOrName === 'object' && 'previewImageUrl' in fileOrName && fileOrName.previewImageUrl) {
-      previewUrl = fileOrName.previewImageUrl;
-    }
-
-    // 1. Instantly display the real uploaded image preview in the UI
-    const immediateDoc = {
-      id: `doc-uploaded-${Date.now()}`,
-      parentId: activeParent.id,
-      fileName,
-      docType: (fileName.toLowerCase().includes('bill') ? 'ELECTRICITY_BILL' : 'PRESCRIPTION') as 'ELECTRICITY_BILL' | 'PRESCRIPTION',
-      previewImageUrl: previewUrl || undefined,
-      issuer: {
-        title: 'OCR Extraction Active...',
-        subtitle: 'Parsing clinical entities & dosage cadences',
-        address: 'Multimodal Vision OCR Engine',
-        regOrConsumer: 'SCAN-ACTIVE'
-      },
-      patientOrConsumerName: activeParent.name,
-      consultDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      vitalsOrSummary: 'Analyzing vitals & medical schedule...',
-      extractedItems: []
-    };
-
-    setActiveDocument(immediateDoc);
-    setScanProgress(45);
-
-    // 2. Perform deep multimodal vision OCR asynchronously
+  const triggerScanAnimation = async (fileInput: File | string) => {
+    setIsScanning(true); setScanProgress(20); playSound('ping');
+    const t1 = setTimeout(() => setScanProgress(55), 250);
+    const t2 = setTimeout(() => setScanProgress(85), 550);
     try {
-      setScanProgress(70);
-      await uploadDocument(typeof fileOrName === 'string' ? { name: fileOrName } : fileOrName);
-      setScanProgress(95);
-      setTimeout(() => {
-        setScanProgress(100);
-        setIsScanning(false);
-        playSound('approval');
-      }, 150);
-    } catch (err) {
-      console.error('OCR processing error:', err);
-      setIsScanning(false);
+      if (typeof fileInput === 'string') await uploadDocument({ name: fileInput });
+      else await uploadDocument(fileInput);
+      clearTimeout(t1); clearTimeout(t2); setScanProgress(100);
+      setTimeout(() => { setIsScanning(false); playSound('approval'); }, 350);
+    } catch {
+      clearTimeout(t1); clearTimeout(t2); setScanProgress(100);
+      setTimeout(() => { setIsScanning(false); }, 350);
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      handleProcessUploadedFile(e.target.files[0]);
-    }
+    if (e.target.files?.[0]) triggerScanAnimation(e.target.files[0]);
   };
 
   return (
-    <div className="space-y-6 pb-24">
-      
-      {/* Top Header Banner */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {/* ── Page Header ── */}
+      <div className="page-header-container">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-slate-900 tracking-tight">
-              Prescription Document Intake & OCR Schedule Verification
-            </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-              Tasks 4.1 & 4.2
-            </span>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Zero-hallucination verification pipeline: AI Vision OCR extracts medicine regimens for <strong>{activeParent.name}</strong>, requiring child validation before autonomous activation.
+          <p className="page-breadcrumb">Operations / Document Intake</p>
+          <h1 className="page-title">Prescription OCR & Verification</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+            Zero-hallucination pipeline for <strong>{activeParent.name}</strong> · Verification required
           </p>
         </div>
-
-        {/* OCR Engine Config & Safety Indicator Badge */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => {
-              setTempKey(geminiKey);
-              setIsKeyModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium cursor-pointer transition-all bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 shadow-2xs"
-            title="Configure Vision OCR Engine"
-          >
-            <Zap className={`w-3.5 h-3.5 ${geminiKey ? 'text-teal-600' : 'text-indigo-600'}`} />
-            <span className="font-semibold">
-              {geminiKey ? 'Gemini 2.0 Flash Active' : 'Client In-Browser OCR Active'}
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              {geminiKey ? '(Cloud API)' : '(Tesseract Engine)'}
-            </span>
-          </button>
-
-          <div className="flex items-center gap-2 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200 text-emerald-800 text-xs font-semibold shrink-0">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Anti-Hallucination Safe Review</span>
-          </div>
+        <div className="page-actions">
+          <span className="status-chip active">
+            <ScanLine size={13} />
+            OCR {backendStatus === 'connected' ? 'Live' : 'Fallback'}
+          </span>
+          <span className="status-chip">
+            <ShieldCheck size={13} />
+            Anti-Hallucination Gate
+          </span>
         </div>
       </div>
 
-      {/* API Key Modal */}
-      <AnimatePresence>
-        {isKeyModalOpen && (
-          <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Key className="w-4 h-4 text-teal-600" />
-                  <h3 className="font-semibold text-slate-900 text-sm">Configure Gemini Vision API Key</h3>
-                </div>
-                <button
-                  onClick={() => setIsKeyModalOpen(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Enter your Google Gemini API key to enable live multimodal Gemini 2.0 Flash extraction for any uploaded image. If blank, SaharaSetu uses the built-in client-side Tesseract.js OCR engine.
-              </p>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Gemini API Key
-                </label>
-                <input
-                  type="password"
-                  value={tempKey}
-                  onChange={(e) => setTempKey(e.target.value)}
-                  placeholder="AIzaSy..."
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTempKey('');
-                    setActiveGeminiApiKey('');
-                    setGeminiKey('');
-                    setIsKeyModalOpen(false);
-                    playSound('ping');
-                  }}
-                  className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                >
-                  Clear Key (Use Client OCR)
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveApiKey}
-                  className="px-4 py-1.5 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                >
-                  Save & Enable
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Recent Ingestion Records & Presets */}
-      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider pl-0.5">
-            Recent Ingestion Records & Presets:
-          </span>
-          <span className="text-[11px] text-slate-400">
-            Click any record to inspect verified extraction & bounding coordinates
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          {samplePresets.map((preset) => {
-            const isActive = activeDocId === preset.id;
-            const IconComponent = preset.icon;
-
+      {/* ── Document switcher ── */}
+      <div className="card" style={{ padding: '10px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto' }}>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Active Docs:</span>
+          {documents.map(doc => {
+            const isActive = activeDocument.id === doc.id;
             return (
               <button
-                key={preset.id}
-                type="button"
-                onClick={() => handleSelectPreset(preset.id, preset.docId)}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                  isActive
-                    ? 'border-slate-900 bg-slate-900 text-white shadow-xs scale-[1.01]'
-                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800'
-                }`}
+                key={doc.id}
+                onClick={() => setActiveDocument(doc)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 13,
+                  fontWeight: isActive ? 600 : 500,
+                  cursor: 'pointer',
+                  border: isActive ? '1px solid var(--terracotta)' : '1px solid var(--border-light)',
+                  background: isActive ? 'var(--soft-accent-tint)' : 'var(--surface-secondary)',
+                  color: isActive ? 'var(--terracotta)' : 'var(--text-muted)',
+                  display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, transition: 'all 0.15s'
+                }}
               >
-                <div className="flex items-center gap-2 truncate">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                    isActive ? 'bg-slate-800 text-teal-300' : 'bg-white text-slate-700 border border-slate-200'
-                  }`}>
-                    <IconComponent className="w-3.5 h-3.5" />
-                  </div>
-                  <span className="text-xs font-medium truncate">
-                    {preset.label}
-                  </span>
-                </div>
-
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 ${
-                  isActive ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-600'
-                }`}>
-                  {preset.badge}
+                <FileText size={14} />
+                {doc.fileName}
+                <span className="mono" style={{ fontSize: 10, opacity: 0.7 }}>
+                  {doc.docType === 'PRESCRIPTION' ? 'Rx' : 'Bill'}
                 </span>
               </button>
             );
           })}
         </div>
+        <button onClick={() => triggerScanAnimation(`rx_dr_jha_${Date.now().toString().slice(-4)}.pdf`)} className="btn btn-outline" style={{ fontSize: 13 }}>
+          <Plus size={14} /> Simulate Upload
+        </button>
       </div>
 
-      {/* Split-Screen Layout: Left Side (Task 4.1) & Right Side (Task 4.2) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* =========================================================================
-            LEFT SIDE: TASK 4.1 DOCUMENT INTAKE & PRESCRIPTION CANVAS (5 Cols)
-        ========================================================================= */}
-        <div className="lg:col-span-5 space-y-4">
-          
-          {/* Drag & Drop Upload Zone */}
+      {/* ── Two-column layout ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 20, alignItems: 'start' }}>
+
+        {/* LEFT: Upload + Canvas */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Drop zone */}
           <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setIsDragging(false);
-              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                handleProcessUploadedFile(e.dataTransfer.files[0]);
-              } else {
-                handleProcessUploadedFile('dr_anjali_deshmukh_prescription.png');
-              }
+            onDrop={e => {
+              e.preventDefault(); setIsDragging(false);
+              if (e.dataTransfer.files?.[0]) triggerScanAnimation(e.dataTransfer.files[0]);
+              else triggerScanAnimation('dr_verma_prescription_pmch.pdf');
             }}
-            className={`p-5 rounded-2xl border-2 border-dashed transition-all text-center cursor-pointer ${
-              isDragging
-                ? 'border-teal-500 bg-teal-50/80 scale-[0.99]'
-                : 'border-slate-300 hover:border-teal-500 bg-white'
-            }`}
+            className="card"
+            style={{
+              padding: '32px 24px',
+              border: `1px dashed ${isDragging ? 'var(--terracotta)' : 'var(--border-light)'}`,
+              background: isDragging ? 'var(--soft-accent-tint)' : 'var(--surface-secondary)',
+              textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s'
+            }}
           >
-            <label className="cursor-pointer block">
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-              <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto mb-2 shadow-2xs">
-                <UploadCloud className="w-5 h-5" />
+            <label style={{ cursor: 'pointer', display: 'block' }}>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={handleFileUpload} />
+              <div style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)', background: '#fff', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <UploadCloud size={24} color="var(--terracotta)" />
               </div>
-              <h4 className="text-xs font-semibold text-slate-800">
-                Drop New Prescription or Lab Scan Here
+              <h4 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-ink)', marginBottom: 4 }}>
+                Drop Prescription or Scan
               </h4>
-              <p className="text-[11px] text-slate-500 mt-0.5 font-mono truncate max-w-sm mx-auto">
-                Supports PDF, PNG, JPG • Loaded: {activeDocument.fileName} ({activeDocument.issuer.title})
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                PDF, PNG, JPG · {activeDocument.issuer.title}
               </p>
             </label>
           </div>
 
-          {/* Scanning Progress Overlay / Skeleton if active (1.2s realistic scanner) */}
+          {/* Scan progress */}
           <AnimatePresence>
             {(isScanning || isOcrProcessing) && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 space-y-2.5 overflow-hidden"
+                className="card"
+                style={{ padding: 16, overflow: 'hidden', background: 'var(--ink)', color: 'var(--bg-page)' }}
               >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-2 font-mono text-teal-300">
-                    <ScanLine className="w-4 h-4 animate-pulse text-teal-400" />
-                    {scanProgress < 40
-                      ? 'Scanning document pixels with OCR Engine...'
-                      : scanProgress < 75
-                      ? 'Detecting prescription molecules & dosages...'
-                      : 'Mapping bounding boxes to schedule slots...'}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--bg-page)' }}>
+                    <ScanLine size={14} /> Vision OCR running...
                   </span>
-                  <span className="font-mono text-xs text-teal-400 font-bold">{scanProgress}%</span>
+                  <span className="mono" style={{ color: 'var(--terracotta)', fontWeight: 700 }}>{scanProgress}%</span>
                 </div>
-                <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                  <motion.div
-                    className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-100"
-                    style={{ width: `${scanProgress}%` }}
-                  />
+                <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: 'var(--terracotta)', width: `${scanProgress}%`, transition: 'width 0.3s ease' }} />
                 </div>
-                <p className="text-[10px] text-slate-400 font-mono">
-                  Grounded extraction &bull; {geminiKey ? 'Gemini 2.0 Flash Multimodal Vision' : 'Client-Side In-Browser Optical Character Recognition'}
-                </p>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Visual Realistic Doctor Prescription / Document Canvas */}
           <PrescriptionCanvas />
         </div>
 
+        {/* RIGHT: Verification table */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        {/* =========================================================================
-            RIGHT SIDE: TASK 4.2 PRE-ACTIVATION SCHEDULE VERIFICATION (7 Cols)
-        ========================================================================= */}
-        <div className="lg:col-span-7 space-y-4">
-          
-          {/* Prominent Mandatory Safety Gate Callout */}
-          <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 shadow-xs flex items-start gap-3 text-amber-950">
-            <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <h4 className="text-xs font-bold tracking-tight uppercase">
-                Safety Guardrail: Child Confirmation Required
+          {/* Safety gate callout */}
+          <div className="card" style={{ padding: 16, display: 'flex', gap: 12, background: 'var(--review-soft)', borderColor: 'var(--mustard)' }}>
+            <ShieldAlert size={20} color="var(--review-text)" style={{ flexShrink: 0 }} />
+            <div>
+              <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--review-text)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                Guardrail: Manual Confirmation Required
               </h4>
-              <p className="text-xs text-amber-900 leading-relaxed">
-                Scheduled calls and vendor orders remain locked until verified by the child. No automated voice IVR calls or local chemist purchase dispatches occur until this schedule is confirmed.
+              <p style={{ fontSize: 14, color: 'var(--review-text)', opacity: 0.9 }}>
+                No automated voice calls or chemist dispatches occur until this schedule is confirmed.
               </p>
             </div>
           </div>
 
-          {/* Schedule Verification Table Card with tight px-3 py-2 padding for zero clipping */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          {/* Verification table */}
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">
-                  Pre-Activation Schedule Verification Table
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-ink)', marginBottom: 2 }}>
+                  Pre-Activation Schedule Verification
                 </h3>
-                <p className="text-xs text-slate-500">
-                  Anti-hallucination safe review &bull; Grounded to {activeDocument.issuer.title}
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  Anti-hallucination safe review before syncing to IVR
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleAddItem}
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer"
-                  title="Add medication or schedule item"
-                >
-                  <Plus className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Add Line Item</span>
-                </button>
-                <span className="text-xs font-semibold text-teal-800 bg-teal-100 px-2.5 py-1 rounded-full">
-                  {prescriptionItems.length} Items Extracted
-                </span>
-              </div>
+              <span className="badge badge-success">{prescriptionItems.length} Items</span>
             </div>
 
-            {/* Table wrapper with overflow-x-auto and tight cell padding */}
-            {prescriptionItems.length === 0 ? (
-              <div className="p-8 text-center space-y-3 bg-slate-50/50">
-                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto border border-slate-200">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div className="space-y-1 max-w-sm mx-auto">
-                  <h5 className="text-xs font-semibold text-slate-800">
-                    No Medication Regimens Extracted
-                  </h5>
-                  <p className="text-[11px] text-slate-500">
-                    This document scan does not contain recognizable prescription medicine names. You can click <strong>+ Add Line Item</strong> to manually create reminders, or upload a prescription image.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddItem}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Add First Schedule Item</span>
-                </button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-[650px]">
-                  <thead>
-                    <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="px-3.5 py-2.5 min-w-[240px]">Medicine & Strength</th>
-                      <th className="px-3 py-2.5 min-w-[95px]">Category</th>
-                      <th className="px-3 py-2.5 min-w-[190px]">Cadence</th>
-                      <th className="px-3 py-2.5 min-w-[160px]">Next Refill Date</th>
-                      <th className="px-3 py-2.5 text-right min-w-[90px]">Confidence</th>
-                      <th className="px-2 py-2.5 text-center w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {prescriptionItems.map((item, idx) => {
-                      const isSelected = selectedRxId === item.id;
-                      const isHighConfidence = item.confidence >= 0.95;
-
-                      return (
-                        <tr
-                          key={item.id}
-                          onClick={() => setSelectedRxId(item.id)}
-                          className={`transition-colors cursor-pointer group ${
-                            isSelected ? 'bg-teal-50/70 font-medium' : 'hover:bg-slate-50'
-                          }`}
-                        >
-                          {/* Medicine Name & Dosage */}
-                          <td className="px-3.5 py-2.5 min-w-[240px]">
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-5 h-5 rounded-md bg-slate-200 text-slate-700 flex items-center justify-center font-mono text-[10px] font-bold shrink-0">
-                                {idx + 1}
-                              </span>
-                              <div className="space-y-0.5 flex-1 min-w-0">
-                                <input
-                                  type="text"
-                                  value={item.medicineName}
-                                  onChange={(e) => handleNameChange(item.id, e.target.value)}
-                                  className="font-bold text-slate-900 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none w-full"
-                                  placeholder="Medicine Name (e.g. Tab. Valsartan)"
-                                />
-                                <input
-                                  type="text"
-                                  value={item.dosage}
-                                  onChange={(e) => handleDosageChange(item.id, e.target.value)}
-                                  className="text-[11px] text-slate-500 font-mono font-medium bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none w-full"
-                                  placeholder="Dosage (e.g. 80mg)"
-                                />
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Category Badge */}
-                          <td className="px-3 py-2.5">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
-                              {item.category}
-                            </span>
-                          </td>
-
-                          {/* Frequency Dropdown */}
-                          <td className="px-3 py-2.5">
-                            <select
-                              value={item.frequency}
-                              onChange={(e) => handleFrequencyChange(item.id, e.target.value)}
-                              className="bg-white border border-slate-300 rounded px-1.5 py-1 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-teal-500 w-full max-w-[190px]"
-                            >
-                              <option value="Once Daily (Morning)">Once Daily (Morning)</option>
-                              <option value="Once Daily (Evening)">Once Daily (Evening)</option>
-                              <option value="Twice Daily (Morning & Night)">Twice Daily (Morning & Night)</option>
-                              <option value="At Bedtime (Night)">At Bedtime (Night)</option>
-                              <option value="As Needed (SOS)">As Needed (SOS)</option>
-                              <option value="Monthly Recurring Cycle">Monthly Recurring Cycle</option>
-                            </select>
-                          </td>
-
-                          {/* Next Refill Trigger Time */}
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-1.5 text-slate-600 font-mono text-[11px]">
-                              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-light)', background: 'var(--surface-secondary)' }}>
+                    {['Medicine & Strength', 'Category', 'Cadence', 'Next Refill', 'Confidence'].map(h => (
+                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {prescriptionItems.map((item, idx) => {
+                    const isSelected = selectedRxId === item.id;
+                    const isHigh = item.confidence >= 0.95;
+                    return (
+                      <tr
+                        key={item.id}
+                        onClick={() => setSelectedRxId(item.id)}
+                        style={{
+                          borderBottom: '1px solid var(--border-light)',
+                          background: isSelected ? 'var(--success-soft)' : '#fff',
+                          cursor: 'pointer', transition: 'background 0.15s'
+                        }}
+                      >
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ width: 24, height: 24, borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</span>
+                            <div>
                               <input
                                 type="text"
-                                value={item.nextTriggerTime}
-                                onChange={(e) => handleTriggerTimeChange(item.id, e.target.value)}
-                                className="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none text-[11px] font-mono text-slate-700 w-full"
+                                value={item.medicineName}
+                                onChange={e => handleNameChange(item.id, e.target.value)}
+                                style={{ fontFamily: 'var(--font-body)', fontWeight: 600, color: 'var(--text-ink)', fontSize: 14, background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
                               />
+                              <p className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.dosage}</p>
                             </div>
-                          </td>
-
-                          {/* Confidence Metric */}
-                          <td className="px-3 py-2.5 text-right">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold whitespace-nowrap ${
-                              isHighConfidence
-                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                : 'bg-amber-50 text-amber-800 border border-amber-200'
-                            }`}>
-                              <Sparkles className="w-2.5 h-2.5" />
-                              {(item.confidence * 100).toFixed(0)}%
-                            </span>
-                          </td>
-
-                          {/* Delete Action */}
-                          <td className="px-2 py-2 text-center">
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteItem(item.id, e)}
-                              className="opacity-40 group-hover:opacity-100 hover:text-rose-600 p-1 rounded transition-opacity cursor-pointer"
-                              title="Remove item"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Verification Footer & CTA */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs text-slate-600">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>
-                  All {prescriptionItems.length} items grounded to <strong>{activeDocument.issuer.title}</strong> ({activeDocument.patientOrConsumerName})
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={approvePrescriptionSchedule}
-                className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
-              >
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span>Approve & Activate Schedule</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', color: 'var(--text-muted)' }}>{item.category}</span>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <select
+                            value={item.frequency}
+                            onChange={e => handleFrequencyChange(item.id, e.target.value)}
+                            style={{ fontFamily: 'var(--font-body)', background: '#fff', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: 13, color: 'var(--text-ink)', outline: 'none', cursor: 'pointer' }}
+                          >
+                            <option value="Once Daily (Morning)">Once Daily</option>
+                            <option value="Twice Daily (Morning & Night)">Twice Daily</option>
+                            <option value="At Bedtime (Night)">At Bedtime</option>
+                            <option value="As Needed (SOS)">As Needed</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 13 }}>
+                            <Clock size={14} /> {item.nextTriggerTime}
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                          <span className={`badge ${isHigh ? 'badge-success' : 'badge-review'}`}>
+                            <Sparkles size={12} /> {(item.confidence * 100).toFixed(0)}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
+            <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface-secondary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
+                <CheckCircle2 size={16} color="var(--success)" />
+                All {prescriptionItems.length} items grounded to <strong>{activeDocument.issuer.title}</strong>
+              </div>
+              <button type="button" onClick={approvePrescriptionSchedule} className="btn btn-ink">
+                Approve & Activate Schedule <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
-
         </div>
-
       </div>
-    </div>
+    </motion.div>
   );
 };
