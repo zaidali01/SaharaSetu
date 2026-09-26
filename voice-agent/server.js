@@ -1,14 +1,17 @@
-// Voice agent webhook server — all of Phase 1 Track A:
-// 1.2 STT (Twilio Gather), 1.3 TTS (Sarvam), 1.4 state machine,
-// 1.5 DTMF fallback, 1.6 no-answer retry, 1.7 distress escalation.
+// Voice agent webhook server — Phase 1 Track A, all tasks.
 //
-// Requires a public URL. Run: ngrok http 3000, then set PUBLIC_BASE_URL in .env.
+// IMPORTANT: run `node pregenerate_audio.js` BEFORE starting this server,
+// and again any time CHILD_NAME/CHEMIST_NAME/DAYS_LEFT change in .env.
+// This server plays pre-made audio files — it does NOT call Sarvam live
+// during a call, because that blew past Twilio's 5-second TwiML fetch
+// timeout and silently killed calls after the trial disclaimer.
 
 require('dotenv').config();
+require('dns').setDefaultResultOrder('ipv4first');
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const twilio = require('twilio');
-const { generateSpeech } = require('./tts');
 const { matchMedicineResponse, matchGasResponse } = require('./matcher');
 const { escalate } = require('./escalate');
 const { placeCall } = require('./place_call');
@@ -20,9 +23,7 @@ app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
 const PORT = process.env.PORT || 3000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
 const CHILD_NAME = process.env.CHILD_NAME || 'aapke bete';
-const CHEMIST_NAME = process.env.CHEMIST_NAME || 'chemist';
-const DAYS_LEFT = process.env.DAYS_LEFT || '4';
-const RETRY_DELAY_MS = 15000; // wait before re-dialing on no-answer — not specified in the original plan, chosen as a reasonable default; change if it doesn't fit your demo timing
+const RETRY_DELAY_MS = 15000;
 
 function requirePublicUrl() {
   if (!PUBLIC_BASE_URL) {
@@ -30,25 +31,25 @@ function requirePublicUrl() {
   }
 }
 
-async function playOrSay(twiml, text, filename) {
-  try {
-    const audioPath = await generateSpeech(text, filename);
-    twiml.play(`${PUBLIC_BASE_URL}${audioPath}`);
-  } catch (err) {
-    console.error('TTS failed, falling back to robotic Say:', err.message);
-    twiml.say({ language: 'hi-IN' }, text);
+// Plays a pre-generated file. Falls back to robotic <Say> only if the file
+// is genuinely missing (e.g. you forgot to run pregenerate_audio.js) —
+// this fallback text must be passed in since we no longer call Sarvam here.
+function playStatic(twiml, filename, fallbackText) {
+  const filePath = path.join(__dirname, 'public', 'audio', filename);
+  if (fs.existsSync(filePath)) {
+    twiml.play(`${PUBLIC_BASE_URL}/audio/${filename}`);
+  } else {
+    console.error(`Missing audio file: ${filename} — did you run pregenerate_audio.js? Falling back to robotic Say.`);
+    twiml.say({ language: 'hi-IN' }, fallbackText);
   }
 }
 
-// ---- 1.4 / 1.2 / 1.3 — call entry point ----
-app.post('/voice', async (req, res) => {
+app.post('/voice', (req, res) => {
   requirePublicUrl();
   const twiml = new twilio.twiml.VoiceResponse();
 
-  const greeting = `Namaste! Main ${CHILD_NAME} ki taraf se baat kar raha hoon. Aapse do minute baat karni hai.`;
-  await playOrSay(twiml, greeting, 'greeting.wav');
+  playStatic(twiml, 'greeting.wav', `Namaste! Main ${CHILD_NAME} ki taraf se baat kar raha hoon.`);
 
-  const medicineQuestion = `Aapki BP ki dawai ab sirf ${DAYS_LEFT} din ki bachi hai. Kya main ${CHEMIST_NAME} ko order bhej doon?`;
   const gather = twiml.gather({
     input: 'speech dtmf',
     numDigits: 1,
@@ -57,7 +58,7 @@ app.post('/voice', async (req, res) => {
     action: '/handle-medicine?attempt=1',
     method: 'POST',
   });
-  await playOrSay(gather, medicineQuestion, 'medicine_question.wav');
+  playStatic(gather, 'medicine_question.wav', 'Kya main dawai ka order bhej doon?');
 
   twiml.say({ language: 'hi-IN' }, 'Mujhe kuch nahi mila. Phir se koshish karte hain.');
   twiml.redirect('/voice');
@@ -65,7 +66,6 @@ app.post('/voice', async (req, res) => {
   res.type('text/xml').send(twiml.toString());
 });
 
-// ---- MEDICINE_CHECK, with 1.5 DTMF retry ----
 app.post('/handle-medicine', async (req, res) => {
   requirePublicUrl();
   const attempt = parseInt(req.query.attempt || '1', 10);
@@ -79,14 +79,12 @@ app.post('/handle-medicine', async (req, res) => {
 
   if (result === 'distress') {
     await escalate({ type: 'distress', state: 'MEDICINE_CHECK', transcript: speechText });
-    await playOrSay(twiml, 'Theek hai, main abhi aapke bete ko bata deta hoon. Aap dhyan rakhiye.', 'distress_ack.wav');
+    playStatic(twiml, 'distress_ack.wav', 'Theek hai, main bata deta hoon.');
     twiml.hangup();
     return res.type('text/xml').send(twiml.toString());
   }
 
   if (result === 'unclear' && attempt < 2) {
-    // Task 1.5: repeat once, this time explicitly offering the keypad.
-    const retryPrompt = 'Mujhe theek se sunayi nahi diya. Haan ke liye ek dabayein, na ke liye do dabayein.';
     const gather = twiml.gather({
       input: 'speech dtmf',
       numDigits: 1,
@@ -95,8 +93,8 @@ app.post('/handle-medicine', async (req, res) => {
       action: '/handle-medicine?attempt=2',
       method: 'POST',
     });
-    await playOrSay(gather, retryPrompt, 'medicine_retry.wav');
-    twiml.redirect('/handle-gas?attempt=1'); // if truly nothing comes back, don't hang the call — move on
+    playStatic(gather, 'medicine_retry.wav', 'Haan ke liye ek dabayein, na ke liye do dabayein.');
+    twiml.redirect('/handle-gas?attempt=1');
     return res.type('text/xml').send(twiml.toString());
   }
 
@@ -108,7 +106,6 @@ app.post('/handle-medicine', async (req, res) => {
     console.log('Still unclear after retry — marking medicine task for manual follow-up.');
   }
 
-  const gasQuestion = 'Gas cylinder ka kya haal hai? Khatam hone wala hai ya abhi theek hai?';
   const gather = twiml.gather({
     input: 'speech dtmf',
     numDigits: 1,
@@ -117,13 +114,12 @@ app.post('/handle-medicine', async (req, res) => {
     action: '/handle-gas?attempt=1',
     method: 'POST',
   });
-  await playOrSay(gather, gasQuestion, 'gas_question.wav');
+  playStatic(gather, 'gas_question.wav', 'Gas cylinder ka kya haal hai?');
   twiml.redirect('/handle-gas?attempt=1');
 
   res.type('text/xml').send(twiml.toString());
 });
 
-// ---- GAS_BOOKING_CHECK, with 1.5 DTMF retry ----
 app.post('/handle-gas', async (req, res) => {
   requirePublicUrl();
   const attempt = parseInt(req.query.attempt || '1', 10);
@@ -137,13 +133,12 @@ app.post('/handle-gas', async (req, res) => {
 
   if (result === 'distress') {
     await escalate({ type: 'distress', state: 'GAS_BOOKING_CHECK', transcript: speechText });
-    await playOrSay(twiml, 'Theek hai, main abhi aapke bete ko bata deta hoon. Aap dhyan rakhiye.', 'distress_ack2.wav');
+    playStatic(twiml, 'distress_ack2.wav', 'Theek hai, main bata deta hoon.');
     twiml.hangup();
     return res.type('text/xml').send(twiml.toString());
   }
 
   if (result === 'unclear' && attempt < 2) {
-    const retryPrompt = 'Gas khatam ho raha hai to ek dabayein, theek hai to do dabayein.';
     const gather = twiml.gather({
       input: 'speech dtmf',
       numDigits: 1,
@@ -152,7 +147,7 @@ app.post('/handle-gas', async (req, res) => {
       action: '/handle-gas?attempt=2',
       method: 'POST',
     });
-    await playOrSay(gather, retryPrompt, 'gas_retry.wav');
+    playStatic(gather, 'gas_retry.wav', 'Kam hai to ek dabayein, theek hai to do dabayein.');
     twiml.redirect('/handle-gas?attempt=2');
     return res.type('text/xml').send(twiml.toString());
   }
@@ -165,16 +160,12 @@ app.post('/handle-gas', async (req, res) => {
     console.log('Still unclear after retry — marking gas task for manual follow-up.');
   }
 
-  const closing = `Theek hai, main ${CHILD_NAME} ko bata dunga sab kuch. Dhyan rakhiye. Namaste.`;
-  await playOrSay(twiml, closing, 'closing.wav');
+  playStatic(twiml, 'closing.wav', `Theek hai, main ${CHILD_NAME} ko bata dunga. Namaste.`);
   twiml.hangup();
 
   res.type('text/xml').send(twiml.toString());
 });
 
-// ---- 1.6 — no-answer retry ----
-// Twilio hits this when the call reaches a final state. If it never
-// connected, retry once; if the retry also fails, escalate a missed-call alert.
 app.post('/call-status', async (req, res) => {
   const attempt = parseInt(req.query.attempt || '1', 10);
   const status = req.body.CallStatus;
@@ -198,5 +189,6 @@ app.post('/call-status', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Voice agent server listening on port ${PORT}`);
+  console.log('Have you run `node pregenerate_audio.js` yet? If not, do that first.');
   console.log('Remember: run ngrok and set PUBLIC_BASE_URL in .env before triggering a call.');
 });

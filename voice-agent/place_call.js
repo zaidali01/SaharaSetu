@@ -3,6 +3,7 @@
 // so both callers can't drift out of sync.
 
 require('dotenv').config();
+require('dns').setDefaultResultOrder('ipv4first'); // fixes 30s timeouts on networks that resolve Twilio's hostname to unreachable IPv6
 const twilio = require('twilio');
 
 const {

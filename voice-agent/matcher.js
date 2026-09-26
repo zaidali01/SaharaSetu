@@ -1,15 +1,18 @@
-// Matches a Twilio SpeechResult transcript against the routing rules
-// from person1/call_state_machine.json. Kept as plain JS so it's easy
-// to unit-test and doesn't depend on file paths across folders.
+// Matches a Twilio SpeechResult transcript against routing rules.
+//
+// IMPORTANT: Twilio's hi-IN speech recognition returns Devanagari script
+// (e.g. "हां", "ठीक है"), NOT romanized Hindi ("haan", "theek hai").
+// These lists must stay in Devanagari or matching silently fails —
+// this was the actual bug behind "not listening properly."
 
 const DISTRESS_KEYWORDS = [
-  'theek nahi', 'tabiyat kharab', 'dard', 'bukhar', 'gir gaya', 'gir gayi', 'madad',
+  'ठीक नहीं', 'तबियत खराब', 'तबीयत खराब', 'दर्द', 'बुखार', 'गिर गया', 'गिर गई', 'मदद',
 ];
 
-const YES_WORDS = ['haan', 'bhej do', 'theek hai', 'ha', 'kar do'];
-const NO_WORDS = ['nahi', 'abhi mat', 'na'];
-const GAS_LOW_WORDS = ['khatam ho raha hai', 'kam hai', 'khatam'];
-const GAS_FINE_WORDS = ['theek hai', 'abhi theek hai'];
+const YES_WORDS = ['हां', 'हाँ', 'भेज दो', 'ठीक है', 'भेजो', 'कर दो', 'हाँ जी', 'हां जी'];
+const NO_WORDS = ['नहीं', 'अभी मत', 'ना', 'रहने दो'];
+const GAS_LOW_WORDS = ['खत्म हो रहा है', 'कम है', 'खत्म'];
+const GAS_FINE_WORDS = ['ठीक है', 'अभी ठीक है'];
 
 // DTMF fallback maps (task 1.5) — digit pressed -> same result labels
 // used by the speech matchers, so server.js branches identically either way.
@@ -17,7 +20,7 @@ const MEDICINE_DTMF_MAP = { '1': 'yes', '2': 'no' };
 const GAS_DTMF_MAP = { '1': 'low', '2': 'fine' };
 
 function normalize(text) {
-  return (text || '').toLowerCase().trim();
+  return (text || '').trim();
 }
 
 function containsAny(text, wordList) {
