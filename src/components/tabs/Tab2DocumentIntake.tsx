@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   UploadCloud, ShieldAlert, CheckCircle2, Sparkles, Clock, ArrowRight,
-  ShieldCheck, ScanLine, FileText, Plus, Trash2
+  ShieldCheck, ScanLine, FileText, Plus, Trash2, GitCompareArrows, PenLine, Undo2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PrescriptionCanvas } from '../prescription/PrescriptionCanvas';
 import { playSound } from '../../utils/audio';
+import { buildFieldDiff, isDosageCorrection, type ExtractedSnapshot } from '../../utils/extractionDiff';
 
 export const Tab2DocumentIntake: React.FC = () => {
   const {
@@ -18,12 +19,39 @@ export const Tab2DocumentIntake: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+  const [showDiff, setShowDiff] = useState(true);
+  const [expandedDiffId, setExpandedDiffId] = useState<string | null>(null);
 
   const handleFrequencyChange = (id: string, newFreq: string) =>
     setPrescriptionItems(prev => prev.map(item => item.id === id ? { ...item, frequency: newFreq } : item));
 
   const handleNameChange = (id: string, newName: string) =>
     setPrescriptionItems(prev => prev.map(item => item.id === id ? { ...item, medicineName: newName } : item));
+
+  // Task 2.5: restore the machine reading for a single field without discarding
+  // the child's other corrections.
+  const revertField = (id: string, field: keyof ExtractedSnapshot) =>
+    setPrescriptionItems(prev => prev.map(item => {
+      if (item.id !== id || !item.extracted) return item;
+      return { ...item, [field]: item.extracted[field] } as typeof item;
+    }));
+
+  const revertAll = () => {
+    setPrescriptionItems(prev => prev.map(item => item.extracted
+      ? { ...item, ...item.extracted } as typeof item
+      : item
+    ));
+    setExpandedDiffId(null);
+    playSound('ping');
+  };
+
+  const diffsById = prescriptionItems.reduce<Record<string, ReturnType<typeof buildFieldDiff>>>((acc, item) => {
+    acc[item.id] = buildFieldDiff(item.extracted, item as unknown as ExtractedSnapshot);
+    return acc;
+  }, {});
+
+  const totalCorrections = Object.values(diffsById).reduce((sum, d) => sum + d.length, 0);
+  const dosageCorrections = Object.values(diffsById).filter(isDosageCorrection).length;
 
   const handleAddItem = () => {
     const newItem = {
@@ -173,6 +201,15 @@ export const Tab2DocumentIntake: React.FC = () => {
           </button>
           <button
             type="button"
+            onClick={() => triggerScanAnimation('epfo_life_certificate_notice.pdf')}
+            className="btn btn-outline"
+            style={{ fontSize: 11, padding: '5px 8px' }}
+            title="EPFO Pension Life Certificate Intimation"
+          >
+            🧓 EPFO Pension
+          </button>
+          <button
+            type="button"
             onClick={() => triggerScanAnimation(`rx_dr_jha_${Date.now().toString().slice(-4)}.pdf`)}
             className="btn btn-outline"
             style={{ fontSize: 11, padding: '5px 10px', background: 'var(--surface-secondary)' }}
@@ -275,6 +312,15 @@ export const Tab2DocumentIntake: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
                   type="button"
+                  onClick={() => setShowDiff(v => !v)}
+                  className="btn btn-outline"
+                  style={{ fontSize: 12, padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 5 }}
+                  title="Toggle the extracted vs. corrected comparison"
+                >
+                  <GitCompareArrows size={13} /> {showDiff ? 'Hide' : 'Show'} Diff
+                </button>
+                <button
+                  type="button"
                   onClick={handleAddItem}
                   className="btn btn-outline"
                   style={{ fontSize: 12, padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 5 }}
@@ -285,11 +331,48 @@ export const Tab2DocumentIntake: React.FC = () => {
               </div>
             </div>
 
+            {/* Correction summary — Task 2.5 */}
+            <AnimatePresence>
+              {showDiff && totalCorrections > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  style={{
+                    padding: '12px 20px',
+                    background: dosageCorrections > 0 ? 'var(--review-soft)' : 'var(--soft-accent-tint)',
+                    borderBottom: '1px solid var(--border-light)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    flexWrap: 'wrap', gap: 10,
+                    overflow: 'hidden'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-ink)' }}>
+                    <PenLine size={15} color="var(--terracotta)" />
+                    <span>
+                      <strong>{totalCorrections}</strong> field correction{totalCorrections === 1 ? '' : 's'} by you against the OCR reading
+                      {dosageCorrections > 0 && (
+                        <> · <strong style={{ color: 'var(--review-text)' }}>{dosageCorrections}</strong> touch dosage strength</>
+                      )}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={revertAll}
+                    className="btn btn-outline"
+                    style={{ fontSize: 11, padding: '4px 9px', display: 'flex', alignItems: 'center', gap: 5 }}
+                  >
+                    <Undo2 size={12} /> Revert all to OCR
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-light)', background: 'var(--surface-secondary)' }}>
-                    {['Medicine & Strength', 'Category', 'Cadence', 'Trigger Slot', 'Confidence', 'Action'].map(h => (
+                    {['Medicine & Strength', 'Category', 'Cadence', 'Trigger Slot', 'Confidence', 'Extraction Diff', 'Action'].map(h => (
                       <th key={h} style={{ padding: '12px 14px', textAlign: h === 'Action' ? 'center' : 'left', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
                     ))}
                   </tr>
@@ -298,9 +381,12 @@ export const Tab2DocumentIntake: React.FC = () => {
                   {prescriptionItems.map((item, idx) => {
                     const isSelected = selectedRxId === item.id;
                     const isHigh = item.confidence >= 0.95;
+                    const isLowConfidence = item.confidence < 0.6;
+                    const diffs = diffsById[item.id] ?? [];
+                    const isDiffOpen = expandedDiffId === item.id;
                     return (
+                      <React.Fragment key={item.id}>
                       <tr
-                        key={item.id}
                         onClick={() => setSelectedRxId(item.id)}
                         style={{
                           borderBottom: '1px solid var(--border-light)',
@@ -331,11 +417,14 @@ export const Tab2DocumentIntake: React.FC = () => {
                             onChange={e => handleFrequencyChange(item.id, e.target.value)}
                             style={{ fontFamily: 'var(--font-body)', background: '#fff', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: 13, color: 'var(--text-ink)', outline: 'none', cursor: 'pointer' }}
                           >
-                            <option value="Once Daily (Morning)">Once Daily</option>
+                            <option value="Once Daily (Morning)">Once Daily (Morning)</option>
+                            <option value="Once Daily (Evening)">Once Daily (Evening)</option>
                             <option value="Twice Daily (Morning & Night)">Twice Daily</option>
                             <option value="At Bedtime (Night)">At Bedtime</option>
                             <option value="Once Weekly">Once Weekly</option>
                             <option value="As Needed (SOS)">As Needed</option>
+                            <option value="Monthly Recurring Cycle">Monthly</option>
+                            <option value="One-Off Deadline">One-Off Deadline</option>
                           </select>
                         </td>
                         <td style={{ padding: '12px 14px' }}>
@@ -344,9 +433,26 @@ export const Tab2DocumentIntake: React.FC = () => {
                           </div>
                         </td>
                         <td style={{ padding: '12px 14px' }}>
-                          <span className={`badge ${isHigh ? 'badge-success' : 'badge-review'}`}>
+                          <span
+                            className={`badge ${isLowConfidence ? 'badge-review' : isHigh ? 'badge-success' : 'badge-review'}`}
+                            title={isLowConfidence ? 'Below the 0.60 clinical gate — mandatory child review' : 'OCR confidence for this line'}
+                          >
                             <Sparkles size={12} /> {(item.confidence * 100).toFixed(0)}%
                           </span>
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          {showDiff && (diffs.length > 0 || !item.extracted) ? (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setExpandedDiffId(isDiffOpen ? null : item.id); }}
+                              className={`badge ${diffs.length > 0 ? (isDosageCorrection(diffs) ? 'badge-review' : 'badge-success') : 'badge-review'}`}
+                              style={{ cursor: 'pointer', border: 'none' }}
+                              title={item.extracted ? 'Compare OCR reading with your corrections' : 'Added manually — not machine extracted'}
+                            >
+                              {item.extracted ? <GitCompareArrows size={12} /> : <PenLine size={12} />}
+                              {item.extracted ? (diffs.length > 0 ? `${diffs.length} edited` : 'No edits') : 'Manual'}
+                            </button>
+                          ) : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>}
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                           <button
@@ -369,16 +475,124 @@ export const Tab2DocumentIntake: React.FC = () => {
                           </button>
                         </td>
                       </tr>
+
+                      {/* Task 2.5: extracted vs. child-corrected diff */}
+                      <AnimatePresence>
+                        {showDiff && isDiffOpen && (
+                          <motion.tr
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            style={{ background: 'var(--surface-secondary)' }}
+                          >
+                            <td colSpan={7} style={{ padding: '0 14px 14px 14px' }}>
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                style={{ overflow: 'hidden' }}
+                              >
+                                <div style={{
+                                  border: '1px solid var(--border-light)',
+                                  borderRadius: 'var(--radius-sm)',
+                                  background: '#fff',
+                                  overflow: 'hidden'
+                                }}>
+                                  <div style={{
+                                    padding: '8px 12px',
+                                    background: 'var(--surface-muted)',
+                                    fontSize: 10,
+                                    fontFamily: 'var(--font-mono)',
+                                    fontWeight: 700,
+                                    color: 'var(--text-muted)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.06em',
+                                    display: 'flex', alignItems: 'center', gap: 6
+                                  }}>
+                                    <GitCompareArrows size={12} />
+                                    Extracted vs. Confirmed
+                                    <span className="mono" style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0 }}>
+                                      source: "{item.rawOcrText}"
+                                    </span>
+                                  </div>
+
+                                  {!item.extracted ? (
+                                    <p style={{ padding: '12px', fontSize: 13, color: 'var(--text-muted)' }}>
+                                      Added manually by you — this row was not produced by the OCR engine, so there is nothing to compare.
+                                    </p>
+                                  ) : diffs.length === 0 ? (
+                                    <p style={{ padding: '12px', fontSize: 13, color: 'var(--text-muted)' }}>
+                                      No corrections — every field matches the OCR reading exactly.
+                                    </p>
+                                  ) : (
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                      <thead>
+                                        <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
+                                          {['Field', 'OCR Extracted', 'Child Confirmed', ''].map(h => (
+                                            <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {diffs.map(d => (
+                                          <tr key={d.field} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                                            <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text-ink)' }}>
+                                              {d.label}
+                                              {d.field === 'dosage' && (
+                                                <span className="badge badge-review" style={{ marginLeft: 6, fontSize: 9 }}>Dosage</span>
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '8px 12px', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
+                                              {d.extractedValue || '—'}
+                                            </td>
+                                            <td style={{ padding: '8px 12px', color: 'var(--text-ink)', fontWeight: 600 }}>
+                                              {d.currentValue || '—'}
+                                            </td>
+                                            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); revertField(item.id, d.field); }}
+                                                className="btn btn-outline"
+                                                style={{ fontSize: 10, padding: '3px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                                title={`Restore the OCR value for ${d.label}`}
+                                              >
+                                                <Undo2 size={10} /> Revert
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+
+                                  {diffs.length > 0 && isDosageCorrection(diffs) && (
+                                    <p style={{ padding: '10px 12px', fontSize: 12, color: 'var(--review-text)', background: 'var(--review-soft)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <ShieldAlert size={13} />
+                                      A strength was overridden by you. The agent never alters dosages — this correction is logged to the audit ledger under your name.
+                                    </p>
+                                  )}
+                                </div>
+                              </motion.div>
+                            </td>
+                          </motion.tr>
+                        )}
+                      </AnimatePresence>
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
               </table>
             </div>
 
-            <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface-secondary)' }}>
+            <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: 'var(--surface-secondary)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
                 <CheckCircle2 size={16} color="var(--success)" />
                 All {prescriptionItems.length} items grounded to <strong>{activeDocument.issuer.title}</strong>
+                {totalCorrections > 0 && (
+                  <span style={{ color: 'var(--terracotta)', fontWeight: 600 }}>
+                    · {totalCorrections} correction{totalCorrections === 1 ? '' : 's'} recorded
+                  </span>
+                )}
               </div>
               <button type="button" onClick={approvePrescriptionSchedule} className="btn btn-ink">
                 Approve & Activate Schedule <ArrowRight size={14} />

@@ -22,6 +22,24 @@ export interface NormalizedFrequency {
 export function normalizeFrequency(rawInput: string): NormalizedFrequency {
   const text = (rawInput || '').trim().toLowerCase();
 
+  // Once daily EVENING / OD evening / 0-0-1.
+  // MUST be tested before the OD/morning branch below: "Once Daily (Evening)"
+  // contains "once daily", so the generic OD rule would otherwise win and silently
+  // reschedule the evening dose to 08:00 AM.
+  const isEveningOnly =
+    (text.includes('evening') || text.includes('night') || text.includes('pm')) &&
+    !text.includes('bedtime') &&
+    !text.includes('hs');
+
+  if (isEveningOnly && (text.includes('od') || text.includes('0-0-1') || text.includes('once daily'))) {
+    return {
+      frequency: 'Once Daily (Evening)',
+      frequencyCode: 'OD',
+      triggerSlot: '08:00 PM Daily',
+      instruction: '1 tablet every evening after dinner'
+    };
+  }
+
   // Once daily / Morning / OD / 1-0-0
   if (
     text.includes('od') ||
@@ -127,6 +145,31 @@ export function normalizeFrequency(rawInput: string): NormalizedFrequency {
     };
   }
 
+  // Monthly recurring cycle — utility bills (Task 2.2)
+  if (text.includes('monthly') || text.includes('month') || text.includes('recurring cycle')) {
+    return {
+      frequency: 'Monthly Recurring Cycle',
+      frequencyCode: 'MONTHLY',
+      triggerSlot: '18th of Every Month',
+      instruction: 'Settle the pending bill before the monthly due date'
+    };
+  }
+
+  // One-off compliance deadline — pension life certificates (Task 2.2)
+  if (
+    text.includes('one-off') ||
+    text.includes('one off') ||
+    text.includes('one_off') ||
+    text.includes('deadline')
+  ) {
+    return {
+      frequency: 'One-Off Deadline',
+      frequencyCode: 'ONE_OFF',
+      triggerSlot: '30-Nov of Every Year',
+      instruction: 'One-time compliance deadline tracked annually'
+    };
+  }
+
   // Default fallback
   return {
     frequency: 'Once Daily (Morning)',
@@ -159,7 +202,67 @@ export function parseUploadedDocument(
     }
   }
 
-  // 1. Utility Bill Heuristic (Electricity / Power)
+  // 1. Pension / Life Certificate Heuristic (EPFO, NPS)
+  if (
+    nameLower.includes('pension') ||
+    nameLower.includes('life') ||
+    nameLower.includes('certificate') ||
+    nameLower.includes('epfo') ||
+    nameLower.includes('nps') ||
+    nameLower.includes('vridhi')
+  ) {
+    const items: ExtractedItem[] = [
+      {
+        id: 'ocr-' + docId + '-1',
+        name: 'Life Certificate Intimation — Due',
+        dosage: 'EPFO Pensioner (Vridhi Pension)',
+        category: 'Pension',
+        frequency: 'One-Off Deadline',
+        frequencyCode: 'ONE_OFF',
+        instruction: 'Submit digitised life certificate to EPFO to continue monthly pension credit',
+        triggerSlot: '30-Nov of Every Year',
+        confidenceScore: 0.94,
+        rawOcrText: 'Life Certificate must be submitted before 30 November each year',
+        sourceBox: { top: 34, left: 10, width: 80, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'ocr-' + docId + '-2',
+        name: 'Aadhaar + PAN — Mandatory Attachments',
+        dosage: 'Biometric Age Proof',
+        category: 'Pension',
+        frequency: 'One-Off Deadline',
+        frequencyCode: 'ONE_OFF',
+        instruction: 'Attach Aadhaar and PAN card along with the life certificate',
+        triggerSlot: '30-Nov of Every Year',
+        confidenceScore: 0.89,
+        rawOcrText: 'Aadhaar Card and PAN Card are mandatory attachments',
+        sourceBox: { top: 43, left: 10, width: 80, height: 7 },
+        status: 'verified'
+      }
+    ];
+
+    return {
+      id: docId,
+      parentId: parent.id,
+      fileName,
+      docType: 'PENSION_CERTIFICATE',
+      issuer: {
+        title: 'EPFO Regional Office, Patna',
+        subtitle: "Employees' Provident Fund Organisation • Govt. of India",
+        address: 'Nicholson Road, Kankarbagh, Patna - 800020',
+        regOrConsumer: 'PRAN MLXY1234567'
+      },
+      patientOrConsumerName: parent.name,
+      consultDate: '12-Sep-2026',
+      vitalsOrSummary: 'PRAN MLXY1234567 • Pension stoppage risk from 01-Dec-2026',
+      extractedItems: items,
+      previewImageUrl,
+      status: 'pending_review'
+    };
+  }
+
+  // 2. Utility Bill Heuristic (Electricity / Power)
   if (
     nameLower.includes('bill') ||
     nameLower.includes('sbpdcl') ||

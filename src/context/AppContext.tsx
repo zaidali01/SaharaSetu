@@ -9,6 +9,11 @@ import {
   evaluateFinancialGuardrail,
   normalizeFrequency 
 } from '../utils/clinicalNormalizer';
+import {
+  buildFieldDiff,
+  isDosageCorrection,
+  type ExtractedSnapshot
+} from '../utils/extractionDiff';
 import type {
   KanbanTask,
   ParentProfile,
@@ -219,7 +224,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncPrescriptionItemsFromDoc = (doc: DocumentRecord) => {
     const items: PrescriptionItem[] = doc.extractedItems.map((item) => {
       const normalized = normalizeFrequency(item.frequency || item.frequencyCode || '');
-      return {
+      const mapped = {
         id: item.id,
         medicineName: item.name,
         dosage: item.dosage || '5 mg',
@@ -233,6 +238,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         category: item.category,
         rawOcrText: item.rawOcrText || `${item.name} ${item.dosage || ''} ${normalized.frequencyCode}`
       };
+      // Task 2.5: freeze the machine reading so child edits can be diffed against it.
+      return { ...mapped, extracted: { ...mapped } as ExtractedSnapshot };
     });
     setPrescriptionItems(items);
     if (items.length > 0) {
@@ -530,7 +537,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     } catch {}
 
-    // Add prescription medicines as confirmed schedule tasks
+    // Task 2.5: reconcile what the OCR engine read against what the child confirmed.
+    const corrections = prescriptionItems
+      .map(item => ({
+        item,
+        diff: buildFieldDiff(item.extracted, item as unknown as ExtractedSnapshot)
+      }))
+      .filter(entry => entry.diff.length > 0);
+
+    const dosageCorrections = corrections.filter(entry => isDosageCorrection(entry.diff));    // Add prescription medicines as confirmed schedule tasks
     const newTasks: KanbanTask[] = prescriptionItems.map((item, index) => ({
       id: 'rx-task-' + item.id,
       title: `${item.medicineName} (${item.dosage})`,
@@ -573,19 +588,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       agentSource: 'Guardrail Engine',
       eventType: 'PRESCRIPTION_SCHEDULE_ACTIVATED',
       severity: 'success',
-      details: `Child verified and activated ${prescriptionItems.length} items extracted from ${activeDocument.issuer.title} (${activeDocument.fileName}). IVR schedule synced for ${activeParent.name}.`,
+      details: `Child verified and activated ${prescriptionItems.length} items extracted from ${activeDocument.issuer.title} (${activeDocument.fileName}). IVR schedule synced for ${activeParent.name}. ${corrections.length} child correction(s) recorded against OCR output.`,
       payload: {
         totalMedicines: prescriptionItems.length,
         doctor: activeDocument.issuer.title,
         patient: activeParent.name,
-        approvedBy: 'Child Dashboard'
+        approvedBy: 'Child Dashboard',
+        extractionCorrections: corrections.length,
+        dosageCorrections: dosageCorrections.length,
+        correctionDiff: corrections.map(entry => ({
+          itemId: entry.item.id,
+          medicine: entry.item.medicineName,
+          fields: entry.diff
+        }))
       }
     });
+
+    if (dosageCorrections.length > 0) {
+      addEventLog({
+        agentSource: 'Guardrail Engine',
+        eventType: 'DOSAGE_STRENGTH_OVERRIDDEN_BY_CHILD',
+        severity: 'warning',
+        details: `Child manually overrode the OCR strength on ${dosageCorrections.length} item(s). The agent never alters dosages; the machine reading is retained in the audit ledger.`,
+        payload: {
+          items: dosageCorrections.map(entry => ({
+            itemId: entry.item.id,
+            medicine: entry.item.medicineName,
+            ocrRead: entry.diff.find(d => d.field === 'dosage')?.extractedValue,
+            childConfirmed: entry.diff.find(d => d.field === 'dosage')?.currentValue
+          }))
+        }
+      });
+    }
 
     addToast({
       type: 'success',
       title: 'Schedule Activated!',
-      message: `${prescriptionItems.length} entities verified. IVR call agent & reminders are active for ${activeParent.name.split(' ')[0]}.`
+      message: corrections.length > 0
+        ? `${prescriptionItems.length} entities verified with ${corrections.length} correction(s) logged. IVR reminders are active for ${activeParent.name.split(' ')[0]}.`
+        : `${prescriptionItems.length} entities verified. IVR call agent & reminders are active for ${activeParent.name.split(' ')[0]}.`
     });
 
     setActiveTab('command_board');

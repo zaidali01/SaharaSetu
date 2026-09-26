@@ -10,7 +10,6 @@ class ExtractionRequest(BaseModel):
     patientName: Optional[str] = Field(default="Ramprasad Atri", description="Target patient name")
     base64Image: Optional[str] = Field(default=None, description="Base64 encoded image string")
     mimeType: Optional[str] = Field(default="image/jpeg", description="MIME type of base64 data")
-
 class IssuerInfo(BaseModel):
     title: str = Field(..., description="Doctor or Organization Title, e.g. 'Dr. S. K. Verma, M.D.'")
     subtitle: str = Field(..., description="Specialization or Dept, e.g. 'Consultant Physician & Cardiologist'")
@@ -54,7 +53,7 @@ class DocumentExtractionResponse(BaseModel):
     documentId: str = Field(..., description="Generated document record UUID")
     documentType: str = Field(
         default="PRESCRIPTION",
-        description="Classification: PRESCRIPTION, UTILITY_BILL, ELECTRICITY_BILL, PENSION_FORM"
+        description="Classification: PRESCRIPTION, UTILITY_BILL, ELECTRICITY_BILL, PENSION_CERTIFICATE"
     )
     fileName: Optional[str] = Field(default="prescription.pdf", description="Source document file name")
     patientOrConsumerName: str = Field(..., description="Patient or Bill Consumer name")

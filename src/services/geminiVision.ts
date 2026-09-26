@@ -59,11 +59,17 @@ export function setActiveGeminiApiKey(key: string): void {
  * Intelligent Dynamic Clinical OCR Entity Extractor
  * Parses raw OCR text line-by-line to extract genuine doctor, clinic, patient, vitals, and all medicine regimens.
  * Zero hardcoded templates — works for any uploaded prescription document.
+ *
+ * Task 2.4: `ocrConfidence` is the recognizer's real page-level confidence (0-100),
+ * passed through from Tesseract. Lines parsed out of genuinely machine-read text
+ * are scored with it rather than an invented constant. When the recognizer reports
+ * nothing, the caller supplies 0 so the line is forced through the human gate.
  */
 export function parseRawOcrTextToDoc(
   rawText: string,
   previewUrl: string,
-  fileName: string
+  fileName: string,
+  ocrConfidence = 0
 ): ExtractedPrescriptionDoc {
   const lines = rawText
     .split(/\r?\n/)
@@ -184,6 +190,18 @@ export function parseRawOcrTextToDoc(
         cleanName = `Tab. ${cleanName}`;
       }
 
+      // Task 2.4 — honest scoring. Start from the recognizer's real page confidence
+      // and degrade it for the specific ways this particular line is ambiguous, so
+      // the number reflects actual legibility rather than being decorative.
+      let lineConfidence = ocrConfidence;
+      if (!strengthMatch) lineConfidence -= 25;
+      if (/standard dose/i.test(strength)) lineConfidence -= 10;
+      if (!/\b(od|bd|bid|tds|tid|qid|qam|pm|hs|sos|qwk|qid|daily|weekly|monthly|night|morning|bedtime)\b/i.test(line)) {
+        lineConfidence -= 15;
+      }
+      if (cleanName.length <= 3) lineConfidence -= 20;
+      lineConfidence = Math.max(0, Math.min(100, Math.round(lineConfidence)));
+
       customMedicines.push({
         id: `med_${customMedicines.length + 1}`,
         name: cleanName,
@@ -191,7 +209,7 @@ export function parseRawOcrTextToDoc(
         category,
         cadence: freq.frequency,
         scheduleSlot: freq.triggerSlot,
-        confidence: 99,
+        confidence: lineConfidence,
         sourceBox: { top: 44 + customMedicines.length * 12, left: 12, width: 76, height: 9 }
       });
     }
@@ -429,7 +447,9 @@ Return ONLY valid JSON. Do not include markdown code fence formatting or convers
                   category: m.category || 'General',
                   cadence: m.cadence || 'Once Daily (Morning)',
                   scheduleSlot: m.scheduleSlot || '08:00 AM Daily',
-                  confidence: typeof m.confidence === 'number' ? m.confidence : 98,
+                  // Task 2.4: only trust a score the model actually returned. An
+                  // omitted score must fail the clinical gate, not inherit a fake 98%.
+                  confidence: typeof m.confidence === 'number' && m.confidence >= 0 && m.confidence <= 100 ? m.confidence : 0,
                   sourceBox: { top: 38 + idx * 12, left: 12, width: 76, height: 8 }
                 }))
               : [],
@@ -446,14 +466,18 @@ Return ONLY valid JSON. Do not include markdown code fence formatting or convers
   // 2. Strategy B: In-Browser Client-Side OCR Engine via Tesseract.js (with 12s timeout)
   if (isFileInstance && typeof window !== 'undefined') {
     try {
-      const ocrPromise = Tesseract.recognize(fileOrObj as File, 'eng').then((res) => res.data?.text || '');
-      const timeoutPromise = new Promise<string>((_, reject) =>
+      // Thread the recognizer's real page confidence through to the parser (Task 2.4).
+      const ocrPromise = Tesseract.recognize(fileOrObj as File, 'eng').then((res) => ({
+        text: res.data?.text || '',
+        confidence: typeof res.data?.confidence === 'number' ? res.data.confidence : 0
+      }));
+      const timeoutPromise = new Promise<{ text: string; confidence: number }>((_, reject) =>
         setTimeout(() => reject(new Error('OCR Timeout')), 12000)
       );
 
-      const ocrText = await Promise.race([ocrPromise, timeoutPromise]);
-      if (ocrText && ocrText.trim().length > 5) {
-        return parseRawOcrTextToDoc(ocrText, previewUrl, (fileOrObj as File).name);
+      const ocrResult = await Promise.race([ocrPromise, timeoutPromise]);
+      if (ocrResult.text && ocrResult.text.trim().length > 5) {
+        return parseRawOcrTextToDoc(ocrResult.text, previewUrl, (fileOrObj as File).name, ocrResult.confidence);
       }
     } catch (err) {
       console.warn('Tesseract OCR scan bypassed / timed out, using clinical classifier:', err);
@@ -472,6 +496,10 @@ export function convertToDocumentRecord(
   const isBill = doc.medicines.some((m) => m.category === 'Utility');
   const extractedItems: ExtractedItem[] = doc.medicines.map((m, idx) => {
     const normalized = normalizeFrequency(m.cadence);
+    // Task 2.4: normalize the 0-100 / 0-1 convention, clamp to range, and apply the
+    // clinical gate. Hardcoding 'verified' here would let an unread scan auto-activate.
+    const raw = m.confidence > 1 ? m.confidence / 100 : m.confidence;
+    const confidenceScore = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
     return {
       id: `ocr-${Date.now()}-${idx + 1}`,
       name: m.name,
@@ -481,10 +509,10 @@ export function convertToDocumentRecord(
       frequencyCode: normalized.frequencyCode,
       instruction: normalized.instruction,
       triggerSlot: m.scheduleSlot || normalized.triggerSlot,
-      confidenceScore: m.confidence > 1 ? m.confidence / 100 : m.confidence,
+      confidenceScore,
       rawOcrText: `${m.name} ${m.strength} (${m.cadence})`,
       sourceBox: m.sourceBox || { top: 38 + idx * 13, left: 12, width: 76, height: 8 },
-      status: 'verified'
+      status: confidenceScore < 0.6 ? 'needs_review' : 'verified'
     };
   });
 

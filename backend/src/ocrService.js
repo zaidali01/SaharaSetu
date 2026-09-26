@@ -169,8 +169,64 @@ async function callGeminiVision(base64Image, mimeType = 'image/jpeg') {
  * Operates offline with realistic medical grounding for Bihar eldercare patients.
  */
 function getGroundedFallbackOCR(fileName = '', customPatientName = 'Ramprasad Atri') {
-  const isBill = fileName.toLowerCase().includes('bill') || fileName.toLowerCase().includes('sbpdcl');
+  const lower = fileName.toLowerCase();
+  const isBill = lower.includes('bill') || lower.includes('sbpdcl');
+  const isPension = lower.includes('pension') || lower.includes('life') ||
+    lower.includes('certificate') || lower.includes('epfo') || lower.includes('nps');
   const isMother = fileName.toLowerCase().includes('shanti') || fileName.toLowerCase().includes('manisha') || fileName.toLowerCase().includes('sinha') || fileName.toLowerCase().includes('thyroid');
+
+  // Task 2.2: pension / life-certificate notices
+  if (isPension && !isBill) {
+    return {
+      documentId: `doc_pension_${Date.now()}`,
+      documentType: 'PENSION_CERTIFICATE',
+      patientOrConsumerName: customPatientName || 'Ramprasad Atri',
+      consultDate: '12-Sep-2026',
+      vitalsOrSummary: 'PRAN MLXY1234567 • Pension stoppage risk from 01-Dec-2026',
+      issuer: {
+        title: 'EPFO Regional Office, Patna',
+        subtitle: "Employees' Provident Fund Organisation • Govt. of India",
+        address: 'Nicholson Road, Kankarbagh, Patna - 800020',
+        regOrConsumer: 'PRAN MLXY1234567'
+      },
+      extractedItems: [
+        {
+          id: 'item_pension_1',
+          name: 'Life Certificate Intimation — Due',
+          strength: 'EPFO Pensioner (Vridhi Pension)',
+          category: 'Pension',
+          frequency: 'One-Off Deadline',
+          frequencyCode: 'ONE_OFF',
+          triggerSlot: '30-Nov of Every Year',
+          instructions: 'Submit digitised life certificate to EPFO to continue monthly pension credit',
+          refillDays: 365,
+          confidenceScore: 0.94,
+          boundingBox: [300, 120, 370, 880],
+          rawOcrText: 'Life Certificate must be submitted before 30 November each year'
+        },
+        {
+          id: 'item_pension_2',
+          name: 'Aadhaar + PAN — Mandatory Attachments',
+          strength: 'Biometric Age Proof',
+          category: 'Pension',
+          frequency: 'One-Off Deadline',
+          frequencyCode: 'ONE_OFF',
+          triggerSlot: '30-Nov of Every Year',
+          instructions: 'Attach Aadhaar and PAN card along with the life certificate',
+          refillDays: 365,
+          confidenceScore: 0.89,
+          boundingBox: [390, 120, 460, 880],
+          rawOcrText: 'Aadhaar Card and PAN Card are mandatory attachments'
+        }
+      ],
+      requiresChildVerification: true,
+      guardrailAudit: {
+        dosageAltered: false,
+        unverifiedMedicinesDetected: 0,
+        status: 'PASSED_CLINICAL_GATE'
+      }
+    };
+  }
 
   if (isBill) {
     return {
@@ -398,62 +454,35 @@ function getGroundedFallbackOCR(fileName = '', customPatientName = 'Ramprasad At
       address: 'Exhibition Road Chauraha, Patna - 800001',
       regOrConsumer: 'BCMR / 2004 / 4891'
     },
+    // LOCKED DEMO SCENARIO (docs/demo_scenario.md section 2, Step 1).
     extractedItems: [
       {
         id: 'med_1',
-        name: 'Tab Amlodipine',
-        strength: '5 mg',
+        name: 'Tab Telmisartan',
+        strength: '40 mg',
         category: 'Cardio',
         frequency: 'Once Daily (Morning)',
         frequencyCode: 'OD',
         triggerSlot: '08:00 AM',
-        instructions: '1 tablet every morning after breakfast for hypertension control',
-        refillDays: 30,
+        instructions: '1 tablet every morning after breakfast for blood pressure control',
+        refillDays: 4,
         confidenceScore: 0.98,
         boundingBox: [360, 120, 430, 880],
-        rawOcrText: 'Tab. Amlodipine 5mg OD (Morn PC)'
+        rawOcrText: 'Tab. Telmisartan 40mg OD (1-0-0) (Morn PC)'
       },
       {
         id: 'med_2',
-        name: 'Tab Metformin HCl',
-        strength: '500 mg',
-        category: 'Diabetes',
-        frequency: 'Twice Daily (Morning & Night)',
-        frequencyCode: 'BD',
-        triggerSlot: '08:30 AM & 08:30 PM',
-        instructions: '1 tablet twice a day immediately after morning and evening meals',
-        refillDays: 30,
-        confidenceScore: 0.96,
-        boundingBox: [450, 120, 520, 880],
-        rawOcrText: 'Tab. Metformin 500mg BD (Post Meals)'
-      },
-      {
-        id: 'med_3',
-        name: 'Tab Atorvastatin',
-        strength: '10 mg',
-        category: 'Lipid',
-        frequency: 'At Bedtime (Night)',
-        frequencyCode: 'HS',
-        triggerSlot: '10:00 PM',
-        instructions: '1 tablet once daily at bedtime with warm water for lipid management',
-        refillDays: 30,
-        confidenceScore: 0.94,
-        boundingBox: [540, 120, 610, 880],
-        rawOcrText: 'Tab. Atorvastatin 10mg HS (Bedtime)'
-      },
-      {
-        id: 'med_4',
-        name: 'Tab Shellcal (Calcium + D3)',
-        strength: '500 mg + 250 IU',
-        category: 'Supplement',
-        frequency: 'Once Daily (Morning)',
+        name: 'Tab Amlodipine',
+        strength: '5 mg',
+        category: 'Cardio',
+        frequency: 'Once Daily (Evening)',
         frequencyCode: 'OD',
-        triggerSlot: '01:30 PM',
-        instructions: '1 tablet once daily after lunch for bone density support',
-        refillDays: 30,
-        confidenceScore: 0.91,
-        boundingBox: [630, 120, 700, 880],
-        rawOcrText: 'Tab. Shellcal 500 OD (Post Lunch)'
+        triggerSlot: '08:00 PM',
+        instructions: '1 tablet every evening after dinner for blood pressure control',
+        refillDays: 4,
+        confidenceScore: 0.98,
+        boundingBox: [450, 120, 520, 880],
+        rawOcrText: 'Tab. Amlodipine 5mg OD (0-0-1) (Night PC)'
       }
     ],
     requiresChildVerification: true,

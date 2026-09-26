@@ -11,6 +11,19 @@ import { INITIAL_PARENTS } from '../data/mockData';
 
 const API_BASE = '/api';
 
+/**
+ * Task 2.4 — Clinical confidence gate.
+ * Any line scoring below this threshold is forced to `needs_review` and can never
+ * auto-activate, mirroring `GuardrailAudit.unverifiedMedicinesDetected` on the backend.
+ */
+export const CLINICAL_GATE_THRESHOLD = 0.6;
+
+/**
+ * Confidence assigned when the engine returns no usable score. Deliberately below
+ * the gate so an unscored line can never masquerade as a verified extraction.
+ */
+export const UNSCORED_CONFIDENCE = 0.0;
+
 /** Track backend connectivity for UI indicators */
 let _lastBackendStatus: 'connected' | 'disconnected' = 'disconnected';
 const _statusListeners: Array<(status: 'connected' | 'disconnected') => void> = [];
@@ -219,7 +232,14 @@ export const apiService = {
       const data = await res.json();
 
       // Map backend OCR response to frontend ExtractedItem shape
-      const items: ExtractedItem[] = (data.extractedItems || []).map((item: any, idx: number) => ({
+      const items: ExtractedItem[] = (data.extractedItems || []).map((item: any, idx: number) => {
+        // Task 2.4: never invent a confidence. A missing or unparseable score is
+        // treated as unverified and forced through the 0.60 clinical gate, because
+        // a fabricated "95%" would defeat the entire human-verification safeguard.
+        const rawScore = Number(item.confidenceScore);
+        const hasScore = Number.isFinite(rawScore) && rawScore >= 0 && rawScore <= 1;
+        const confidenceScore = hasScore ? rawScore : UNSCORED_CONFIDENCE;
+        return {
         id: item.id || `ocr-item-${Date.now()}-${idx}`,
         name: item.name || item.medicineName || 'Unknown Item',
         dosage: item.strength || item.dosage || '',
@@ -228,7 +248,8 @@ export const apiService = {
         frequencyCode: item.frequencyCode || 'OD',
         instruction: item.instructions || item.instruction || 'Take as directed',
         triggerSlot: item.triggerSlot || '08:00 AM',
-        confidenceScore: item.confidenceScore ?? 0.95,
+        confidenceScore,
+        refillDays: typeof item.refillDays === 'number' ? item.refillDays : 30,
         rawOcrText: item.rawOcrText || `${item.name} ${item.strength || ''}`,
         sourceBox: item.boundingBox
           ? {
@@ -238,8 +259,9 @@ export const apiService = {
               height: Math.round(((item.boundingBox[2] - item.boundingBox[0]) / 1000) * 100)
             }
           : { top: 36 + idx * 10, left: 12, width: 76, height: 7 },
-        status: (item.confidenceScore ?? 0.95) < 0.6 ? 'needs_review' : 'verified'
-      }));
+        status: confidenceScore < CLINICAL_GATE_THRESHOLD ? 'needs_review' : 'verified'
+        };
+      });
 
       return {
         success: true,

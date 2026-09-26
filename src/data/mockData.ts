@@ -1,3 +1,5 @@
+import type { ExtractedSnapshot } from '../utils/extractionDiff';
+
 export interface TranscriptData {
   callId: string;
   duration: string;
@@ -84,6 +86,7 @@ export interface ExtractedItem {
     height: number;
   };
   status?: 'verified' | 'needs_review' | 'active';
+  refillDays?: number;
 }
 
 export interface DocumentRecord {
@@ -121,8 +124,13 @@ export interface PrescriptionItem {
     height: number;
   };
   status: 'verified' | 'needs_review' | 'active';
-  category: 'Cardio' | 'Diabetes' | 'Lipid' | 'Supplement' | 'Thyroid' | string;
+  category: 'Cardio' | 'Diabetes' | 'Lipid' | 'Supplement' | 'Thyroid' | 'Pension' | string;
   rawOcrText: string;
+  /**
+   * Immutable snapshot of the values the OCR engine produced, captured at intake.
+   * Task 2.5 — powers the "extracted vs. child-corrected" diff. Never mutate this.
+   */
+  extracted?: ExtractedSnapshot;
 }
 
 export interface AgentNode {
@@ -370,63 +378,37 @@ export const INITIAL_DOCUMENTS: DocumentRecord[] = [
     },
     patientOrConsumerName: 'Ramprasad Atri',
     consultDate: '24-Sep-2026',
-    vitalsOrSummary: 'BP: 128/82, Fasting: 114 mg/dL',
+    vitalsOrSummary: 'BP: 148/92 • Refill due in 4 days',
     extractedItems: [
       {
         id: 'rx-1',
-        name: 'Tab Amlodipine',
-        dosage: '5 mg',
+        name: 'Tab Telmisartan',
+        dosage: '40 mg',
         category: 'Cardio',
         frequency: 'Once Daily (Morning)',
         frequencyCode: 'OD',
-        instruction: '1 tablet every morning after breakfast for hypertension control',
+        instruction: '1 tablet every morning after breakfast for blood pressure control',
         triggerSlot: '08:00 AM Tomorrow',
         confidenceScore: 0.98,
-        rawOcrText: 'Tab. Amlodipine 5mg OD (Morn PC)',
+        refillDays: 4,
+        rawOcrText: 'Tab. Telmisartan 40mg OD (1-0-0) (Morn PC)',
         sourceBox: { top: 36, left: 12, width: 76, height: 7 },
         status: 'verified'
       },
       {
         id: 'rx-2',
-        name: 'Tab Metformin HCl',
-        dosage: '500 mg',
-        category: 'Diabetes',
-        frequency: 'Twice Daily (Morning & Night)',
-        frequencyCode: 'BD',
-        instruction: '1 tablet twice a day immediately after morning and evening meals',
-        triggerSlot: '08:30 AM & 08:30 PM',
-        confidenceScore: 0.96,
-        rawOcrText: 'Tab. Metformin 500mg BD (Post Meals)',
+        name: 'Tab Amlodipine',
+        dosage: '5 mg',
+        category: 'Cardio',
+        frequency: 'Once Daily (Evening)',
+        frequencyCode: 'OD',
+        instruction: '1 tablet every evening after dinner for blood pressure control',
+        triggerSlot: '08:00 PM Tonight',
+        confidenceScore: 0.98,
+        refillDays: 4,
+        rawOcrText: 'Tab. Amlodipine 5mg OD (0-0-1) (Night PC)',
         sourceBox: { top: 45, left: 12, width: 76, height: 7 },
         status: 'verified'
-      },
-      {
-        id: 'rx-3',
-        name: 'Tab Atorvastatin',
-        dosage: '10 mg',
-        category: 'Lipid',
-        frequency: 'At Bedtime (Night)',
-        frequencyCode: 'HS',
-        instruction: '1 tablet once daily at bedtime with warm water for lipid management',
-        triggerSlot: '10:00 PM Tonight',
-        confidenceScore: 0.94,
-        rawOcrText: 'Tab. Atorvastatin 10mg HS (Bedtime)',
-        sourceBox: { top: 54, left: 12, width: 76, height: 7 },
-        status: 'verified'
-      },
-      {
-        id: 'rx-4',
-        name: 'Tab Shellcal (Calcium + D3)',
-        dosage: '500 mg + 250 IU',
-        category: 'Supplement',
-        frequency: 'Once Daily (Morning)',
-        frequencyCode: 'OD',
-        instruction: '1 tablet once daily after lunch for bone density support',
-        triggerSlot: '01:30 PM Tomorrow',
-        confidenceScore: 0.91,
-        rawOcrText: 'Tab. Shellcal 500 OD (Post Lunch)',
-        sourceBox: { top: 63, left: 12, width: 76, height: 7 },
-        status: 'needs_review'
       }
     ]
   },

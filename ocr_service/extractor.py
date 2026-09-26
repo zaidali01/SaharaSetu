@@ -21,40 +21,48 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 CLINICAL_PROMPT = """
-You are an expert Clinical Vision OCR Specialist for an eldercare platform operating in Bihar, India.
-Analyze the doctor prescription or utility bill image with 100% precision.
+You are an expert Document Vision OCR Specialist for an eldercare platform operating in Bihar, India.
+Analyze the uploaded document (doctor prescription, utility bill, or pension / life-certificate notice)
+with 100% precision.
 
 CRITICAL CLINICAL INVARIANTS:
-1. ZERO-HALLUCINATION: If doctor handwriting is illegible or ambiguous, DO NOT GUESS. Set confidenceScore < 0.60.
+1. ZERO-HALLUCINATION: If handwriting or print is illegible or ambiguous, DO NOT GUESS. Set confidenceScore < 0.60.
 2. DO NOT ALTER MOLECULES: Extract exact medicine names and dosages (e.g. "Tab Amlodipine 5mg").
-3. NORMALIZE RECURRENCE:
-   - OD / Morning -> frequency: "Once Daily (Morning)", frequencyCode: "OD", triggerSlot: "08:00 AM"
+3. CLASSIFY FIRST: choose exactly one documentType.
+   - "PRESCRIPTION"        -> doctor/clinical prescription
+   - "ELECTRICITY_BILL"    -> SBPDCL / NBPDCL / state power utility bill
+   - "PENSION_CERTIFICATE" -> EPFO / NPS life-certificate or pension-continuity intimation
+4. NORMALIZE RECURRENCE (prescriptions):
+   - OD / Morning  -> frequency: "Once Daily (Morning)",  frequencyCode: "OD",  triggerSlot: "08:00 AM"
+   - OD / Evening  -> frequency: "Once Daily (Evening)",  frequencyCode: "OD",  triggerSlot: "08:00 PM"
    - BD / Twice Daily -> frequency: "Twice Daily (Morning & Night)", frequencyCode: "BD", triggerSlot: "08:30 AM & 08:30 PM"
-   - HS / Bedtime -> frequency: "At Bedtime (Night)", frequencyCode: "HS", triggerSlot: "10:00 PM"
-   - TDS / Thrice Daily -> frequency: "Thrice Daily", frequencyCode: "TDS", triggerSlot: "08:00 AM, 02:00 PM & 08:30 PM"
-   - SOS -> frequency: "As Needed (SOS)", frequencyCode: "SOS", triggerSlot: "As Needed"
-   - QWK / Once Weekly -> frequency: "Once Weekly", frequencyCode: "QWK", triggerSlot: "Every Sunday 09:00 AM"
-4. BOUNDING BOXES: Provide normalized coordinates [ymin, xmin, ymax, xmax] scaled 0 to 1000 for each medicine line.
+   - HS / Bedtime  -> frequency: "At Bedtime (Night)",   frequencyCode: "HS", triggerSlot: "10:00 PM"
+   - TDS / Thrice Daily -> frequency: "Thrice Daily",    frequencyCode: "TDS", triggerSlot: "08:00 AM, 02:00 PM & 08:30 PM"
+   - SOS           -> frequency: "As Needed (SOS)",      frequencyCode: "SOS", triggerSlot: "As Needed"
+   - QWK / Once Weekly -> frequency: "Once Weekly",      frequencyCode: "QWK", triggerSlot: "Every Sunday 09:00 AM"
+   - MONTHLY (bills)  -> frequency: "Monthly Recurring Cycle", frequencyCode: "MONTHLY", triggerSlot: "<due day> of Every Month"
+   - ONE_OFF (pension)-> frequency: "One-Off Deadline",  frequencyCode: "ONE_OFF", triggerSlot: "<deadline date>"
+5. BOUNDING BOXES: Provide normalized coordinates [ymin, xmin, ymax, xmax] scaled 0 to 1000 for each extracted line.
 
 Return valid JSON adhering strictly to this schema:
 {
   "documentId": "doc_rx_12345",
-  "documentType": "PRESCRIPTION" or "UTILITY_BILL" or "ELECTRICITY_BILL",
+  "documentType": "PRESCRIPTION" | "ELECTRICITY_BILL" | "PENSION_CERTIFICATE",
   "patientOrConsumerName": "Patient Name",
   "consultDate": "DD-Mon-YYYY",
   "vitalsOrSummary": "BP: 120/80 etc.",
   "issuer": {
-    "title": "Dr. Name, Degrees",
-    "subtitle": "Specialization",
-    "address": "Clinic Address",
-    "regOrConsumer": "Registration Number"
+    "title": "Dr. Name, Degrees / Office Name",
+    "subtitle": "Specialization or Department",
+    "address": "Clinic / Office Address",
+    "regOrConsumer": "Registration Number / Consumer ID / PRAN"
   },
   "extractedItems": [
     {
       "id": "med_1",
-      "name": "Full medicine name",
-      "strength": "Dose (e.g. 5mg)",
-      "category": "Cardio" | "Diabetes" | "Lipid" | "Thyroid" | "Orthopedic" | "Supplement" | "General" | "Utility",
+      "name": "Full entity name",
+      "strength": "Dose or descriptor (e.g. 5mg)",
+      "category": "Cardio" | "Diabetes" | "Lipid" | "Thyroid" | "Orthopedic" | "Supplement" | "General" | "Utility" | "Pension",
       "frequency": "Once Daily (Morning)",
       "frequencyCode": "OD",
       "triggerSlot": "08:00 AM",
@@ -118,6 +126,20 @@ def normalize_frequency_slot(raw: str) -> Dict[str, str]:
             "frequencyCode": "QWK",
             "triggerSlot": "Every Sunday 09:00 AM",
             "instruction": "1 dose once weekly every Sunday"
+        }
+    if any(k in text for k in ["monthly", "month", "every month", "recurring cycle"]):
+        return {
+            "frequency": "Monthly Recurring Cycle",
+            "frequencyCode": "MONTHLY",
+            "triggerSlot": "18th of Every Month",
+            "instruction": "Settle the pending bill before the monthly due date"
+        }
+    if any(k in text for k in ["one-off", "one off", "one_off", "single", "one-time", "lifetime", "deadline"]):
+        return {
+            "frequency": "One-Off Deadline",
+            "frequencyCode": "ONE_OFF",
+            "triggerSlot": "30-Nov of Every Year",
+            "instruction": "One-time compliance deadline tracked annually"
         }
     return {
         "frequency": "Once Daily (Morning)",
@@ -347,66 +369,96 @@ def get_grounded_fallback(file_name: str = "", patient_name: str = "Ramprasad At
             extractionEngine="Clinical Grounded Engine"
         )
 
-    # 4. Default: Dr. S. K. Verma (Cardiologist & Physician, Patna) for Ramprasad Atri
+    # 4. Pension / Life Certificate (EPFO / NPS subscriber intimation)
+    if any(k in name_lower for k in ["pension", "life", "certificate", "epfo", "nps", "vridhi", "pensioner"]):
+        items = [
+            ExtractedMedicineItem(
+                id="item_pension_1",
+                name="Life Certificate Intimation — Due",
+                strength="EPFO Pensioner (Vridhi Pension)",
+                category="Pension",
+                frequency="One-Off Deadline",
+                frequencyCode="ONE_OFF",
+                triggerSlot="30-Nov of Every Year",
+                instructions="Submit digitised life certificate to EPFO to continue monthly pension credit",
+                refillDays=365,
+                confidenceScore=0.94,
+                boundingBox=[300, 120, 370, 880],
+                rawOcrText="Life Certificate must be submitted before 30 November each year",
+                status="verified"
+            ),
+            ExtractedMedicineItem(
+                id="item_pension_2",
+                name="Aadhaar + PAN — Mandatory Attachments",
+                strength="Biometric Age Proof",
+                category="Pension",
+                frequency="One-Off Deadline",
+                frequencyCode="ONE_OFF",
+                triggerSlot="30-Nov of Every Year",
+                instructions="Attach Aadhaar and PAN card along with the life certificate",
+                refillDays=365,
+                confidenceScore=0.89,
+                boundingBox=[390, 120, 460, 880],
+                rawOcrText="Aadhaar Card and PAN Card are mandatory attachments",
+                status="verified"
+            )
+        ]
+        return DocumentExtractionResponse(
+            documentId=f"doc_pension_{ts}",
+            documentType="PENSION_CERTIFICATE",
+            fileName=file_name or "epfo_life_certificate_notice.pdf",
+            patientOrConsumerName=patient_name or "Ramprasad Atri",
+            consultDate="12-Sep-2026",
+            vitalsOrSummary="PRAN MLXY1234567 • Pension stoppage risk from 01-Dec-2026",
+            issuer=IssuerInfo(
+                title="EPFO Regional Office, Patna",
+                subtitle="Employees' Provident Fund Organisation • Govt. of India",
+                address="Nicholson Road, Kankarbagh, Patna - 800020",
+                regOrConsumer="PRAN MLXY1234567"
+            ),
+            extractedItems=items,
+            requiresChildVerification=True,
+            guardrailAudit=GuardrailAudit(
+                dosageAltered=False,
+                unverifiedMedicinesDetected=0,
+                status="PASSED_CLINICAL_GATE"
+            ),
+            extractionEngine="Clinical Grounded Engine"
+        )
+
+    # 5. Default: Dr. S. K. Verma (Cardiologist, Patna)
+    # LOCKED DEMO SCENARIO (docs/demo_scenario.md section 2, Step 1).
+    # Do not change molecules, strengths or trigger slots here without
+    # re-syncing the locked judging script.
     items = [
         ExtractedMedicineItem(
             id=f"med_1",
-            name="Tab Amlodipine",
-            strength="5 mg",
+            name="Tab Telmisartan",
+            strength="40 mg",
             category="Cardio",
             frequency="Once Daily (Morning)",
             frequencyCode="OD",
             triggerSlot="08:00 AM",
-            instructions="1 tablet every morning after breakfast for hypertension control",
-            refillDays=30,
+            instructions="1 tablet every morning after breakfast for blood pressure control",
+            refillDays=4,
             confidenceScore=0.98,
             boundingBox=[360, 120, 430, 880],
-            rawOcrText="Tab. Amlodipine 5mg OD (Morn PC)",
+            rawOcrText="Tab. Telmisartan 40mg OD (1-0-0) (Morn PC)",
             status="verified"
         ),
         ExtractedMedicineItem(
             id=f"med_2",
-            name="Tab Metformin HCl",
-            strength="500 mg",
-            category="Diabetes",
-            frequency="Twice Daily (Morning & Night)",
-            frequencyCode="BD",
-            triggerSlot="08:30 AM & 08:30 PM",
-            instructions="1 tablet twice a day immediately after morning and evening meals",
-            refillDays=30,
-            confidenceScore=0.96,
-            boundingBox=[450, 120, 520, 880],
-            rawOcrText="Tab. Metformin 500mg BD (Post Meals)",
-            status="verified"
-        ),
-        ExtractedMedicineItem(
-            id=f"med_3",
-            name="Tab Atorvastatin",
-            strength="10 mg",
-            category="Lipid",
-            frequency="At Bedtime (Night)",
-            frequencyCode="HS",
-            triggerSlot="10:00 PM",
-            instructions="1 tablet once daily at bedtime with warm water for lipid management",
-            refillDays=30,
-            confidenceScore=0.94,
-            boundingBox=[540, 120, 610, 880],
-            rawOcrText="Tab. Atorvastatin 10mg HS (Bedtime)",
-            status="verified"
-        ),
-        ExtractedMedicineItem(
-            id=f"med_4",
-            name="Tab Shellcal (Calcium + D3)",
-            strength="500 mg + 250 IU",
-            category="Supplement",
-            frequency="Once Daily (Morning)",
+            name="Tab Amlodipine",
+            strength="5 mg",
+            category="Cardio",
+            frequency="Once Daily (Evening)",
             frequencyCode="OD",
-            triggerSlot="01:30 PM",
-            instructions="1 tablet once daily after lunch for bone density support",
-            refillDays=30,
-            confidenceScore=0.91,
-            boundingBox=[630, 120, 700, 880],
-            rawOcrText="Tab. Shellcal 500 OD (Post Lunch)",
+            triggerSlot="08:00 PM",
+            instructions="1 tablet every evening after dinner for blood pressure control",
+            refillDays=4,
+            confidenceScore=0.98,
+            boundingBox=[450, 120, 520, 880],
+            rawOcrText="Tab. Amlodipine 5mg OD (0-0-1) (Night PC)",
             status="verified"
         )
     ]
@@ -417,7 +469,7 @@ def get_grounded_fallback(file_name: str = "", patient_name: str = "Ramprasad At
         fileName=file_name or "dr_verma_prescription_pmch.pdf",
         patientOrConsumerName=patient_name or "Ramprasad Atri",
         consultDate="24-Sep-2026",
-        vitalsOrSummary="BP: 128/82, Fasting: 114 mg/dL",
+        vitalsOrSummary="BP: 148/92 • Refill due in 4 days",
         issuer=IssuerInfo(
             title="Dr. S. K. Verma, M.D.",
             subtitle="Consultant Physician & Cardiologist • Senior Ex-Consultant PMCH Patna",

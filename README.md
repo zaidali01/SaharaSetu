@@ -73,9 +73,13 @@ flowchart TD
 - **Escalation Logic:** Automatic escalation to emergency contacts after 3 unanswered rings.
 
 ### 📄 Track B (Role 2): Document Intelligence & Vision OCR
-- **Multimodal Extraction:** Powered by client-side Gemini 2.0 Flash (`src/services/geminiVision.ts`) with zero-hallucination bounding coordinates.
-- **Clinical Normalizer (`src/utils/clinicalNormalizer.ts`):** Normalizes Latin frequencies (`OD`, `BD`, `TDS`, `QID`, `HS`, `SOS`, `1-0-1`) into concrete reminder slots (`08:00 AM`, `08:30 PM`, `10:00 PM`).
+- **Multimodal Extraction:** Live Gemini 2.0 Flash multimodal Vision OCR (`src/services/geminiVision.ts`) with an in-browser Tesseract.js fallback, plus a grounded offline engine so the demo never hard-fails. Grounding coordinates are zero-hallucination normalized bounding boxes.
+- **Three Document Classes:** `PRESCRIPTION`, `ELECTRICITY_BILL` / `UTILITY_BILL`, and `PENSION_CERTIFICATE` (EPFO life-certificate intimation — the "pension life certificate before the November deadline" case from the problem statement).
+- **Clinical Normalizer (`src/utils/clinicalNormalizer.ts`):** Normalizes Latin frequencies (`OD`, `BD`, `TDS`, `HS`, `SOS`, `QWK`, `MONTHLY`, `ONE_OFF`) into concrete reminder slots (`08:00 AM`, `08:30 PM`, `30-Nov of Every Year`). `Once Daily (Evening)` is matched ahead of the generic `OD` rule so an evening dose is never silently rescheduled to the morning.
+- **Extraction Diff (`src/utils/extractionDiff.ts`):** Every item carries an immutable `extracted` snapshot of what the OCR engine read. The Document Intake screen shows *extracted vs. child-confirmed* per field, with per-field revert, a "revert all to OCR" action, and an immutable record of the diff written to the audit ledger on approval. Strength overrides are flagged separately because the agent must never be the party that changes a dosage.
+- **Honest Confidence (Task 2.4):** A missing or out-of-range OCR score is recorded as `0.0` and forced into `needs_review` rather than being defaulted to a flattering number. Any item below the `0.60` clinical gate cannot auto-activate.
 - **Anti-Hallucination Gate:** Extracted schedules remain strictly in pre-activation status until confirmed by the child.
+- **Sample Documents & Tests (Tasks 0.7 / 2.6):** `ocr_service/samples/` holds the three required sample documents (prescription, electricity bill, pension letter), regenerable via `ocr_service/make_samples.py`. `ocr_service/test_ocr.py` runs the real pipeline over them, so Task 3.4t is a repeatable command.
 
 ### ⚙️ Track C (Role 3): Backend Orchestration & Guardrails
 - **Deterministic State Transitions:** `PENDING` &rarr; `AWAITING_APPROVAL` &rarr; `DONE` / `BLOCKED`.
@@ -101,7 +105,7 @@ flowchart TD
 
 | Guardrail Rule | Target Risk | Enforcement Mechanism |
 | :--- | :--- | :--- |
-| **Rule #1: Immutable Dosages** | LLM Hallucination | Extracted medication molecules and strengths are locked to source OCR bounding boxes and require child review. |
+| **Rule #1: Immutable Dosages** | LLM Hallucination | Extracted medication molecules and strengths are locked to source OCR bounding boxes and require child review. A child strength override is surfaced as a safety event in the audit ledger rather than applied silently. |
 | **Rule #2: ₹1,000 Financial Gate** | Unauthorized Debits | Any transaction exceeding **₹1,000** mandates explicit dashboard authorization. |
 | **Rule #3: Distress Escalation** | Undetected Medical Emergencies | Detected distress phrases trigger the top alert drawer, high-priority audio chime, and push notifications. |
 | **Rule #4: Audit Immutability** | Audit Tampering | Append-only SHA-256 hash chain records actor (`child_dashboard`, `sarvam_telephony`, `guardrail_engine`) for every state transition. |
