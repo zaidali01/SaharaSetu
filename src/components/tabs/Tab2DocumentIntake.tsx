@@ -45,22 +45,26 @@ export const Tab2DocumentIntake: React.FC = () => {
   };
 
   return (
-    <div>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+    >
       {/* ── Page Header ── */}
-      <div className="page-header">
+      <div className="page-header-container">
         <div>
           <p className="page-breadcrumb">Operations / Document Intake</p>
-          <h1 className="page-title">Prescription OCR & Schedule Verification</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-            Zero-hallucination pipeline for <strong>{activeParent.name}</strong> · Child validation required before activation
+          <h1 className="page-title">Prescription OCR & Verification</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+            Zero-hallucination pipeline for <strong>{activeParent.name}</strong> · Verification required
           </p>
         </div>
         <div className="page-actions">
-          <span className="status-pill active">
+          <span className="status-chip active">
             <ScanLine size={13} />
-            Track B Vision OCR: {backendStatus === 'connected' ? 'Live' : 'Fallback'}
+            OCR {backendStatus === 'connected' ? 'Live' : 'Fallback'}
           </span>
-          <span className="status-pill active">
+          <span className="status-chip">
             <ShieldCheck size={13} />
             Anti-Hallucination Gate
           </span>
@@ -70,7 +74,7 @@ export const Tab2DocumentIntake: React.FC = () => {
       {/* ── Document switcher ── */}
       <div className="card" style={{ padding: '10px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto' }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Active Docs:</span>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Active Docs:</span>
           {documents.map(doc => {
             const isActive = activeDocument.id === doc.id;
             return (
@@ -78,22 +82,18 @@ export const Tab2DocumentIntake: React.FC = () => {
                 key={doc.id}
                 onClick={() => setActiveDocument(doc)}
                 style={{
-                  padding: '5px 12px',
-                  borderRadius: 6,
-                  fontSize: 12,
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 13,
                   fontWeight: isActive ? 600 : 500,
                   cursor: 'pointer',
-                  border: isActive ? '1px solid var(--accent)' : '1px solid var(--card-border)',
-                  background: isActive ? 'var(--green-50)' : '#fff',
-                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  flexShrink: 0,
-                  transition: 'all 0.12s',
+                  border: isActive ? '1px solid var(--terracotta)' : '1px solid var(--border-light)',
+                  background: isActive ? 'var(--soft-accent-tint)' : 'var(--surface-secondary)',
+                  color: isActive ? 'var(--terracotta)' : 'var(--text-muted)',
+                  display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, transition: 'all 0.15s'
                 }}
               >
-                <FileText size={11} />
+                <FileText size={14} />
                 {doc.fileName}
                 <span className="mono" style={{ fontSize: 10, opacity: 0.7 }}>
                   {doc.docType === 'PRESCRIPTION' ? 'Rx' : 'Bill'}
@@ -102,12 +102,8 @@ export const Tab2DocumentIntake: React.FC = () => {
             );
           })}
         </div>
-        <button
-          onClick={() => triggerScanAnimation(`rx_dr_jha_${Date.now().toString().slice(-4)}.pdf`)}
-          className="btn-primary"
-          style={{ fontSize: 12, padding: '6px 14px' }}
-        >
-          <Plus size={13} /> Simulate Upload
+        <button onClick={() => triggerScanAnimation(`rx_dr_jha_${Date.now().toString().slice(-4)}.pdf`)} className="btn btn-outline" style={{ fontSize: 13 }}>
+          <Plus size={14} /> Simulate Upload
         </button>
       </div>
 
@@ -115,7 +111,7 @@ export const Tab2DocumentIntake: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 20, alignItems: 'start' }}>
 
         {/* LEFT: Upload + Canvas */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Drop zone */}
           <div
@@ -128,24 +124,22 @@ export const Tab2DocumentIntake: React.FC = () => {
             }}
             className="card"
             style={{
-              padding: '28px 20px',
-              border: `2px dashed ${isDragging ? 'var(--accent)' : 'var(--card-border)'}`,
-              background: isDragging ? 'var(--green-50)' : '#fff',
-              textAlign: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.12s',
+              padding: '32px 24px',
+              border: `1px dashed ${isDragging ? 'var(--terracotta)' : 'var(--border-light)'}`,
+              background: isDragging ? 'var(--soft-accent-tint)' : 'var(--surface-secondary)',
+              textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s'
             }}
           >
             <label style={{ cursor: 'pointer', display: 'block' }}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={handleFileUpload} />
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--green-50)', border: '1px solid var(--green-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                <UploadCloud size={20} color="var(--accent)" />
+              <div style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)', background: '#fff', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <UploadCloud size={24} color="var(--terracotta)" />
               </div>
-              <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-                Drop Prescription or Lab Scan Here
+              <h4 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-ink)', marginBottom: 4 }}>
+                Drop Prescription or Scan
               </h4>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Supports PDF, PNG, JPG · {activeDocument.issuer.title} loaded
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                PDF, PNG, JPG · {activeDocument.issuer.title}
               </p>
             </label>
           </div>
@@ -158,16 +152,16 @@ export const Tab2DocumentIntake: React.FC = () => {
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 className="card"
-                style={{ padding: 16, overflow: 'hidden', background: '#1a1a2e', color: '#fff', border: 'none' }}
+                style={{ padding: 16, overflow: 'hidden', background: 'var(--ink)', color: 'var(--bg-page)' }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--sprout)' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--bg-page)' }}>
                     <ScanLine size={14} /> Vision OCR running...
                   </span>
-                  <span style={{ color: 'var(--sprout)', fontWeight: 700 }}>{scanProgress}%</span>
+                  <span className="mono" style={{ color: 'var(--terracotta)', fontWeight: 700 }}>{scanProgress}%</span>
                 </div>
-                <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 99, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', background: 'var(--sprout)', borderRadius: 99, width: `${scanProgress}%`, transition: 'width 0.3s ease' }} />
+                <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: 'var(--terracotta)', width: `${scanProgress}%`, transition: 'width 0.3s ease' }} />
                 </div>
               </motion.div>
             )}
@@ -177,41 +171,41 @@ export const Tab2DocumentIntake: React.FC = () => {
         </div>
 
         {/* RIGHT: Verification table */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Safety gate callout */}
-          <div className="card" style={{ padding: 14, display: 'flex', gap: 12, background: 'var(--amber-50)', border: '1px solid var(--amber-100)' }}>
-            <ShieldAlert size={18} color="var(--amber-600)" style={{ flexShrink: 0, marginTop: 2 }} />
+          <div className="card" style={{ padding: 16, display: 'flex', gap: 12, background: 'var(--review-soft)', borderColor: 'var(--mustard)' }}>
+            <ShieldAlert size={20} color="var(--review-text)" style={{ flexShrink: 0 }} />
             <div>
-              <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber-600)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
-                Safety Guardrail: Child Confirmation Required
+              <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--review-text)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                Guardrail: Manual Confirmation Required
               </h4>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                No automated voice calls or chemist dispatches occur until this schedule is confirmed by you.
+              <p style={{ fontSize: 14, color: 'var(--review-text)', opacity: 0.9 }}>
+                No automated voice calls or chemist dispatches occur until this schedule is confirmed.
               </p>
             </div>
           </div>
 
           {/* Verification table */}
           <div className="card" style={{ overflow: 'hidden' }}>
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--card-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-ink)', marginBottom: 2 }}>
                   Pre-Activation Schedule Verification
                 </h3>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                   Anti-hallucination safe review before syncing to IVR
                 </p>
               </div>
-              <span className="kanban-column-badge green">{prescriptionItems.length} Items</span>
+              <span className="badge badge-success">{prescriptionItems.length} Items</span>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--card-border)', background: 'var(--content-bg)' }}>
+                  <tr style={{ borderBottom: '1px solid var(--border-light)', background: 'var(--surface-secondary)' }}>
                     {['Medicine & Strength', 'Category', 'Cadence', 'Next Refill', 'Confidence'].map(h => (
-                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -224,34 +218,33 @@ export const Tab2DocumentIntake: React.FC = () => {
                         key={item.id}
                         onClick={() => setSelectedRxId(item.id)}
                         style={{
-                          borderBottom: '1px solid var(--card-border)',
-                          background: isSelected ? 'var(--green-50)' : '#fff',
-                          cursor: 'pointer',
-                          transition: 'background 0.1s',
+                          borderBottom: '1px solid var(--border-light)',
+                          background: isSelected ? 'var(--success-soft)' : '#fff',
+                          cursor: 'pointer', transition: 'background 0.15s'
                         }}
                       >
-                        <td style={{ padding: '10px 14px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ width: 20, height: 20, borderRadius: 5, background: 'var(--content-bg)', border: '1px solid var(--card-border)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</span>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ width: 24, height: 24, borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</span>
                             <div>
                               <input
                                 type="text"
                                 value={item.medicineName}
                                 onChange={e => handleNameChange(item.id, e.target.value)}
-                                style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13, background: 'transparent', border: 'none', borderBottom: '1px solid transparent', outline: 'none', width: '100%' }}
+                                style={{ fontFamily: 'var(--font-body)', fontWeight: 600, color: 'var(--text-ink)', fontSize: 14, background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
                               />
                               <p className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.dosage}</p>
                             </div>
                           </div>
                         </td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: 'var(--content-bg)', border: '1px solid var(--card-border)', color: 'var(--text-secondary)' }}>{item.category}</span>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', color: 'var(--text-muted)' }}>{item.category}</span>
                         </td>
-                        <td style={{ padding: '10px 14px' }}>
+                        <td style={{ padding: '12px 16px' }}>
                           <select
                             value={item.frequency}
                             onChange={e => handleFrequencyChange(item.id, e.target.value)}
-                            style={{ background: '#fff', border: '1px solid var(--card-border)', borderRadius: 6, padding: '4px 8px', fontSize: 12, color: 'var(--text-primary)', outline: 'none', cursor: 'pointer' }}
+                            style={{ fontFamily: 'var(--font-body)', background: '#fff', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: 13, color: 'var(--text-ink)', outline: 'none', cursor: 'pointer' }}
                           >
                             <option value="Once Daily (Morning)">Once Daily</option>
                             <option value="Twice Daily (Morning & Night)">Twice Daily</option>
@@ -259,20 +252,14 @@ export const Tab2DocumentIntake: React.FC = () => {
                             <option value="As Needed (SOS)">As Needed</option>
                           </select>
                         </td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)', fontSize: 12 }}>
-                            <Clock size={11} color="var(--text-muted)" /> {item.nextTriggerTime}
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 13 }}>
+                            <Clock size={14} /> {item.nextTriggerTime}
                           </div>
                         </td>
-                        <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                            padding: '3px 8px', borderRadius: 99,
-                            fontSize: 11, fontWeight: 700,
-                            background: isHigh ? 'var(--green-100)' : 'var(--amber-100)',
-                            color: isHigh ? 'var(--green-600)' : 'var(--amber-600)',
-                          }}>
-                            <Sparkles size={10} /> {(item.confidence * 100).toFixed(0)}%
+                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                          <span className={`badge ${isHigh ? 'badge-success' : 'badge-review'}`}>
+                            <Sparkles size={12} /> {(item.confidence * 100).toFixed(0)}%
                           </span>
                         </td>
                       </tr>
@@ -282,22 +269,18 @@ export const Tab2DocumentIntake: React.FC = () => {
               </table>
             </div>
 
-            <div style={{ padding: '14px 18px', borderTop: '1px solid var(--card-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
-                <CheckCircle2 size={14} color="var(--green-600)" />
+            <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface-secondary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
+                <CheckCircle2 size={16} color="var(--success)" />
                 All {prescriptionItems.length} items grounded to <strong>{activeDocument.issuer.title}</strong>
               </div>
-              <button
-                type="button"
-                onClick={approvePrescriptionSchedule}
-                className="btn-primary"
-              >
+              <button type="button" onClick={approvePrescriptionSchedule} className="btn btn-ink">
                 Approve & Activate Schedule <ArrowRight size={14} />
               </button>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
