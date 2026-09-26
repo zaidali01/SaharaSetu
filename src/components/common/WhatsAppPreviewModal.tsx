@@ -131,19 +131,55 @@ export const WhatsAppPreviewModal: React.FC = () => {
               </div>
             </div>
 
-            {/* WhatsApp Chat Bubble Simulation */}
-            <div className="bg-[#e7fedb] border border-[#c1e7a9] rounded-2xl rounded-tl-sm p-4 text-slate-800 shadow-2xs relative">
-              <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-line font-normal">
-                {activeLang === 'hindi' ? draft.messageHindi : draft.messageEnglish}
-              </p>
-              <div className="flex items-center justify-end gap-1 mt-2 text-[10px] text-emerald-800">
-                <span>12:15 PM</span>
-                <CheckCheck className="w-3.5 h-3.5 text-teal-600" />
+            {/* WhatsApp Chat Simulation Container */}
+            <div 
+              className="rounded-2xl border border-emerald-900/10 p-4 space-y-3 relative shadow-inner overflow-hidden"
+              style={{
+                backgroundColor: '#efeae2',
+                backgroundImage: `radial-gradient(#0000000a 1px, transparent 1px)`,
+                backgroundSize: '12px 12px'
+              }}
+            >
+              {/* WhatsApp Voice Note Simulation */}
+              <div className="bg-white/90 backdrop-blur-xs border border-emerald-800/10 rounded-2xl rounded-tl-xs p-3 text-slate-800 shadow-2xs flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <span className="text-xs">▶</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1 h-3">
+                    <div className="w-1 h-2 bg-emerald-600 rounded-full animate-pulse" />
+                    <div className="w-1 h-3.5 bg-emerald-600 rounded-full" />
+                    <div className="w-1 h-1.5 bg-emerald-600 rounded-full" />
+                    <div className="w-1 h-4 bg-emerald-600 rounded-full" />
+                    <div className="w-1 h-2 bg-emerald-400 rounded-full" />
+                    <div className="w-1 h-3 bg-emerald-400 rounded-full" />
+                    <div className="w-1 h-1.5 bg-emerald-300 rounded-full" />
+                    <div className="w-1 h-2.5 bg-emerald-300 rounded-full" />
+                    <div className="w-1 h-3.5 bg-emerald-300 rounded-full" />
+                    <div className="w-1 h-2 bg-slate-300 rounded-full" />
+                    <div className="w-1 h-1 bg-slate-300 rounded-full" />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                    <span className="font-mono">0:14 • SaharaSetu Auto Voice Prompt</span>
+                    <span className="text-emerald-700 font-medium">Bilingual Synthesizer</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* WhatsApp Text Chat Bubble Simulation */}
+              <div className="bg-[#d9fdd3] border border-[#b7ebb0] rounded-2xl rounded-tl-xs p-3.5 text-slate-800 shadow-2xs relative ml-4">
+                <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-line font-sans text-slate-900">
+                  {activeLang === 'hindi' ? draft.messageHindi : draft.messageEnglish}
+                </p>
+                <div className="flex items-center justify-end gap-1 mt-2 text-[10px] text-emerald-800">
+                  <span>12:15 PM</span>
+                  <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />
+                </div>
               </div>
             </div>
 
             {/* Guardrail Callout */}
-            <div className="flex items-center gap-2 text-xs text-amber-900 bg-amber-50 p-3 rounded-xl border border-amber-200">
+            <div className="flex items-center gap-2.5 text-xs text-amber-950 bg-amber-50 p-3 rounded-xl border border-amber-200 shadow-2xs">
               <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
               <span>
                 <strong>Safety Gate:</strong> This automated order will NOT be transmitted to WhatsApp until you click &ldquo;Approve &amp; Dispatch&rdquo;.
@@ -153,14 +189,24 @@ export const WhatsAppPreviewModal: React.FC = () => {
 
           {/* Footer Actions */}
           <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copied' : 'Copy Message'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Copied' : 'Copy Text'}</span>
+              </button>
+              <a
+                href={`https://wa.me/${draft.recipientPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(activeLang === 'hindi' ? draft.messageHindi : draft.messageEnglish)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>↗ Open in WhatsApp</span>
+              </a>
+            </div>
 
             <div className="flex items-center gap-2">
               <button
