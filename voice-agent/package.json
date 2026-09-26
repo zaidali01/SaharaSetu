@@ -1,0 +1,12 @@
+{
+  "name": "saharasetu-voice-agent",
+  "version": "0.1.0",
+  "description": "Person 1 track — outbound call trigger and conversation agent",
+  "main": "call_trigger.js",
+  "type": "commonjs",
+  "dependencies": {
+    "twilio": "^5.3.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
