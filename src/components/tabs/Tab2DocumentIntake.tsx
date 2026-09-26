@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext';
 import { PrescriptionCanvas } from '../prescription/PrescriptionCanvas';
 import { playSound } from '../../utils/audio';
 import { buildFieldDiff, isDosageCorrection, type ExtractedSnapshot } from '../../utils/extractionDiff';
+import { CLINICAL_GATE_THRESHOLD } from '../../services/api';
 
 export const Tab2DocumentIntake: React.FC = () => {
   const {
@@ -24,6 +25,10 @@ export const Tab2DocumentIntake: React.FC = () => {
 
   const handleFrequencyChange = (id: string, newFreq: string) =>
     setPrescriptionItems(prev => prev.map(item => item.id === id ? { ...item, frequency: newFreq } : item));
+
+  // Task 3.5t: the OCR engine no longer invents a confidence score, so genuinely
+  // unscored lines now surface here instead of hiding behind a default 0.95.
+  const needsReviewCount = prescriptionItems.filter(i => i.confidence < CLINICAL_GATE_THRESHOLD).length;
 
   const handleNameChange = (id: string, newName: string) =>
     setPrescriptionItems(prev => prev.map(item => item.id === id ? { ...item, medicineName: newName } : item));
@@ -297,6 +302,31 @@ export const Tab2DocumentIntake: React.FC = () => {
               </p>
             </div>
           </div>
+
+          {/* Dynamic low-confidence banner (Task 3.5t) */}
+          <AnimatePresence>
+            {needsReviewCount > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className="card"
+                style={{ padding: 14, display: 'flex', gap: 12, background: 'var(--surface-muted)', borderColor: 'var(--terracotta)' }}
+              >
+                <ShieldAlert size={18} color="var(--terracotta)" style={{ flexShrink: 0 }} />
+                <div>
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--terracotta)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                    {needsReviewCount} line{needsReviewCount > 1 ? 's' : ''} below the {CLINICAL_GATE_THRESHOLD.toFixed(2)} clinical gate
+                  </h4>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    The scanner could not read {needsReviewCount > 1 ? 'these lines' : 'this line'} confidently.
+                    We recorded 0% rather than guessing — check {needsReviewCount > 1 ? 'them' : 'it'} against the
+                    paper prescription before confirming.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Verification table */}
           <div className="card" style={{ overflow: 'hidden' }}>

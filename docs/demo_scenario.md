@@ -95,3 +95,6 @@ During the live judging presentation, demonstrate 2 deliberate safety tests:
 | **1:00 - 1:50** | Person 1 & 4 | Trigger live phone call on stage: Phone rings, answered in Hindi, confirm refill. Show live WhatsApp message received by "Chemist". | Live real-world execution. |
 | **1:50 - 2:30** | Person 4 & 3 | Show Tri-Column Status Board: 1-click payment approval, agent trace telemetry, distress alert simulation. | Safety guardrails, non-autonomous payments. |
 | **2:30 - 3:00** | All | Summary, Q&A on security/privacy guardrails, wrap up. | Polish & confidence. |
+
+Verbatim spoken lines, the judge Q&A table, and the rehearsal checklist live in
+[`docs/pitch_script.md`](./pitch_script.md) (Task 4.2d).

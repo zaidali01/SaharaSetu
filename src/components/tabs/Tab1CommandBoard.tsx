@@ -1,15 +1,16 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Clock, Play, ShieldCheck, RefreshCw, AlertCircle
+  Clock, Play, ShieldCheck, RefreshCw, AlertCircle, CheckCircle2, Inbox, Ban
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { EmptyState, SkeletonBoard } from '../common/EmptyState';
 
 export const Tab1CommandBoard: React.FC = () => {
   const {
     tasks, approveTask, rejectTask,
     setActiveTranscriptTask, setActiveChemistModalTask, setActiveAuditTask,
-    refreshFromBackend,
+    refreshFromBackend, isSyncing, hasHydrated,
     setIsGuardrailsOpen,
   } = useApp();
 
@@ -29,8 +30,7 @@ export const Tab1CommandBoard: React.FC = () => {
 
   return (
     <div>
-      {/* ── Page Header ── */}
-      <div className="page-header-container">
+      {/* ── Page Header ── */}      <div className="page-header-container">
         <div>
           <p className="page-breadcrumb">Operations / Command Board</p>
           <h1 className="page-title">Operational Command Center</h1>
@@ -45,10 +45,12 @@ export const Tab1CommandBoard: React.FC = () => {
           </button>
           <button
             onClick={() => refreshFromBackend()}
-            className="btn btn-outline"
+            className="btn btn-outline sync-pulse"
+            disabled={isSyncing}
+            aria-busy={isSyncing}
           >
-            <RefreshCw size={14} />
-            Sync Data
+            <RefreshCw size={14} className={isSyncing ? 'spin' : undefined} />
+            {isSyncing ? 'Syncing' : 'Sync Data'}
           </button>
         </div>
       </div>
@@ -73,6 +75,7 @@ export const Tab1CommandBoard: React.FC = () => {
       </div>
 
       {/* ── Kanban Board ── */}
+      {hasHydrated ? (
       <div className="kanban-grid">
 
         {/* ── Column 1: Done & Verified ── */}
@@ -87,7 +90,14 @@ export const Tab1CommandBoard: React.FC = () => {
           </div>
 
           <AnimatePresence>
-            {doneTasks.map(task => (
+            {doneTasks.length === 0 ? (
+              <EmptyState
+                icon={<CheckCircle2 size={16} />}
+                title="Nothing completed yet"
+                body="Approved refills, gas bookings and payments land here with a full audit trail."
+              />
+            ) : (
+              doneTasks.map(task => (
               <motion.div key={task.id} layout className="task-card">
                 <span className="task-eyebrow">{getCategoryLabel(task.category)}</span>
                 <div className="task-card-header">
@@ -121,7 +131,8 @@ export const Tab1CommandBoard: React.FC = () => {
                   </div>
                 )}
               </motion.div>
-            ))}
+            ))
+            )}
           </AnimatePresence>
         </motion.div>
 
@@ -137,7 +148,14 @@ export const Tab1CommandBoard: React.FC = () => {
           </div>
 
           <AnimatePresence>
-            {needsApprovalTasks.map(task => (
+            {needsApprovalTasks.length === 0 ? (
+              <EmptyState
+                icon={<Inbox size={16} />}
+                title="Queue is clear"
+                body="Refill thresholds, gas cycles and any payment needing sign-off will surface here."
+              />
+            ) : (
+              needsApprovalTasks.map(task => (
               <motion.div key={task.id} layout className="task-card">
                 <span className="task-eyebrow">{getCategoryLabel(task.category)}</span>
                 <div className="task-card-header">
@@ -171,7 +189,8 @@ export const Tab1CommandBoard: React.FC = () => {
                   <button onClick={() => rejectTask(task.id)} className="btn btn-outline" style={{ flex: 1 }}>Reject</button>
                 </div>
               </motion.div>
-            ))}
+            ))
+            )}
           </AnimatePresence>
         </motion.div>
 
@@ -187,7 +206,14 @@ export const Tab1CommandBoard: React.FC = () => {
           </div>
 
           <AnimatePresence>
-            {blockedTasks.map(task => (
+            {blockedTasks.length === 0 ? (
+              <EmptyState
+                icon={<Ban size={16} />}
+                title="No blockers"
+                body="Nothing is stuck. A blocked refill or failed check-in would appear here."
+              />
+            ) : (
+              blockedTasks.map(task => (
               <motion.div key={task.id} layout className="task-card">
                 <span className="task-eyebrow">{getCategoryLabel(task.category)}</span>
                 <div className="task-card-header">
@@ -216,11 +242,15 @@ export const Tab1CommandBoard: React.FC = () => {
                   )}
                 </div>
               </motion.div>
-            ))}
+            ))
+            )}
           </AnimatePresence>
         </motion.div>
 
       </div>
+      ) : (
+        <SkeletonBoard />
+      )}
     </div>
   );
 };

@@ -108,6 +108,8 @@ interface AppContextType {
   // Phase 2 Backend & OCR Integration
   backendStatus: 'connected' | 'offline';
   refreshFromBackend: () => Promise<void>;
+  isSyncing: boolean;
+  hasHydrated: boolean;
   isOcrProcessing: boolean;
   
   // Selected Rx Item for synchronized canvas highlight
@@ -152,10 +154,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // satisfies its foreign key. Absent while offline.
   const [backendDocIds, setBackendDocIds] = useState<Record<string, string>>({});
 
+  // Task 3.5t: distinguishes "still hydrating from the backend" from "the board is
+  // genuinely empty", so the dashboard can show a skeleton rather than a blank page
+  // on first paint.
+  const [isSyncing, setIsSyncing] = useState<boolean>(true);
+  const [hasHydrated, setHasHydrated] = useState<boolean>(false);
+
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Function to pull live tasks and logs from Track C Backend (Task 2.6i)
   const refreshFromBackend = async () => {
+    setIsSyncing(true);
     try {
       const isHealthy = await apiService.checkHealth();
       setBackendStatus(isHealthy ? 'connected' : 'offline');
@@ -193,6 +202,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch {
       setBackendStatus('offline');
+    } finally {
+      setIsSyncing(false);
+      setHasHydrated(true);
     }
   };
 
@@ -1068,6 +1080,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedRxId,
         backendStatus,
         refreshFromBackend,
+        isSyncing,
+        hasHydrated,
         isOcrProcessing
       }}
     >

@@ -366,6 +366,55 @@ h1, h2, h3, h4, h5, h6 {
 }
 .info-text { font-size: 13px; color: var(--text-ink); line-height: 1.5; }
 
+/* ─── Empty / Loading States (Task 3.5t) ───────────────────── */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 28px 20px; text-align: center;
+  border: 1px dashed var(--border-input); border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+}
+.empty-state-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: var(--radius-full);
+  background: var(--card-bg); border: 1px solid var(--border-light);
+  color: var(--text-muted);
+}
+.empty-state-title {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-ink);
+}
+.empty-state-body { font-size: 12px; line-height: 1.5; max-width: 30ch; }
+
+/* Skeleton shimmer used while the backend status board is syncing. */
+.skeleton-card {
+  height: 92px; border-radius: var(--radius-md);
+  border: 1px solid var(--border-light); background: var(--surface-muted);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 254, 252, 0.75) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-sweep {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-card { animation: none; }
+}
+
+/* Inline "syncing" affordance for the manual refresh control. */
+.sync-pulse { display: inline-flex; align-items: center; gap: 6px; }
+.sync-pulse .spin { animation: sync-spin 0.9s linear infinite; }
+@keyframes sync-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .sync-pulse .spin { animation: none; }
+}
+
 /* ─── Animations ──────────────────────────────────────────── */
 @media (prefers-reduced-motion: no-preference) {
   .reveal-enter {

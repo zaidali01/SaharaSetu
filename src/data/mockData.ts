@@ -564,8 +564,11 @@ export const getTasksForParent = (parent: ParentProfile): KanbanTask[] => {
   return [
     {
       id: `task-1-${parent.id}`,
-      title: isMother ? 'Morning Thyroid Medicine (Thyronorm 50mcg)' : 'Morning BP Medicine (Amlodipine 5mg)',
-      subtitle: isMother ? '1 tablet early morning empty stomach' : '1 tablet after breakfast (Routine Daily)',
+      // The locked demo opens on the *evening* BP check ("क्या आपने अपनी शाम वाली
+      // बीपी की गोली ली?"), and the locked prescription makes Amlodipine the 08:00 PM
+      // dose with Telmisartan as the 08:00 AM one.
+      title: isMother ? 'Morning Thyroid Medicine (Thyronorm 50mcg)' : 'Evening BP Medicine (Amlodipine 5mg)',
+      subtitle: isMother ? '1 tablet early morning empty stomach' : '1 tablet after dinner (OD evening, 08:00 PM)',
       column: 'done',
       category: 'medication',
       time: '8:15 AM',
@@ -651,12 +654,12 @@ export const getTasksForParent = (parent: ParentProfile): KanbanTask[] => {
       title: `Chemist Refill Dispatch — ${chemistName}`,
       subtitle: isMother 
         ? 'Thyronorm 50mcg (1 bottle 120s) + Telmisartan 40mg (1 strip)'
-        : 'Metformin 500mg (2 strips) + Amlodipine 5mg (1 strip)',
+        : 'Telmisartan 40mg (1 strip) — running low at 4 days',
       column: 'needs_approval',
       category: 'chemist',
       time: 'Due Today',
       date: 'Prescription Refill',
-      amount: 340.00,
+      amount: 180.00,
       vendor: `${chemistName}, ${chemistArea}`,
       badgeText: 'Manual Sign-off Required',
       guardrailStatus: {
@@ -673,11 +676,23 @@ export const getTasksForParent = (parent: ParentProfile): KanbanTask[] => {
           { name: 'Tab Thyronorm 50mcg (120 tabs)', qty: '1 bottle', estimatedPrice: 190.00 },
           { name: 'Tab Telmisartan 40mg (Telma 40)', qty: '1 strip (15 tabs)', estimatedPrice: 150.00 }
         ] : [
-          { name: 'Tab Metformin 500mg (Glycomet 500)', qty: '2 strips (20 tabs)', estimatedPrice: 190.00 },
-          { name: 'Tab Amlodipine 5mg (Amlong 5)', qty: '1 strip (15 tabs)', estimatedPrice: 150.00 }
+          // Locked demo (docs/demo_scenario.md §2, Step 3): Telmisartan is the molecule
+          // that crosses the 4-day threshold, so it is the only line on the order.
+          { name: 'Tab Telmisartan 40mg (Telma 40)', qty: '1 strip (15 tabs)', estimatedPrice: 180.00 }
         ],
-        messageHindi: `नमस्ते ${chemistPerson.split(' ')[0]} जी! सहाय AI (${parentName} जी के सुपुत्र युवराज द्वारा अधिकृत)।\nकृपया नीचे दी गई दवाइयां आज शाम 5 बजे तक घर पहुँचा दीजिए:\n\n1. ${isMother ? 'Tab Thyronorm 50mcg' : 'Tab Metformin 500mg'} - 2 स्ट्रिप\n2. ${isMother ? 'Tab Telmisartan 40mg' : 'Tab Amlodipine 5mg'} - 1 स्ट्रिप\n\nपता: ${parentAddress}।\nभुगतान: डिलीवरी पर ऑनलाइन UPI (₹340) तुरंत ट्रांसफर कर दिया जाएगा। धन्यवाद!`,
-        messageEnglish: `Hello ${chemistPerson.split(' ')[0]} ji! Sahay AI (Authorized on behalf of ${parentName}'s family).\nPlease deliver the following medicines by 5 PM today:\n1. ${isMother ? 'Tab Thyronorm 50mcg' : 'Tab Metformin 500mg'} - 2 strips\n2. ${isMother ? 'Tab Telmisartan 40mg' : 'Tab Amlodipine 5mg'} - 1 strip\nAddress: ${parentAddress}.\nPayment: UPI ₹340 will be transferred upon delivery receipt. Thank you!`
+        // Built from `items` so the message can never contradict the order summary.
+        messageHindi: `नमस्ते ${chemistPerson.split(' ')[0]} जी! सहाय AI (${parentName} जी के सुपुत्र युवराज द्वारा अधिकृत)।\nकृपया नीचे दी गई दवाइयां आज शाम 5 बजे तक घर पहुँचा दीजिए:\n\n${(isMother ? [
+          { name: 'Tab Thyronorm 50mcg', qty: '1 बोतल' },
+          { name: 'Tab Telmisartan 40mg', qty: '1 स्ट्रिप' }
+        ] : [
+          { name: 'Tab Telmisartan 40mg', qty: '1 पत्ता' }
+        ]).map((it, i) => `${i + 1}. ${it.name} - ${it.qty}`).join('\n')}\n\nपता: ${parentAddress}।\nभुगतान: डिलीवरी पर ऑनलाइन UPI (₹${isMother ? '340' : '180'}) तुरंत ट्रांसफर कर दिया जाएगा। धन्यवाद!`,
+        messageEnglish: `Hello ${chemistPerson.split(' ')[0]} ji! Sahay AI (Authorized on behalf of ${parentName}'s family).\nPlease deliver the following medicines by 5 PM today:\n${(isMother ? [
+          { name: 'Tab Thyronorm 50mcg', qty: '1 bottle' },
+          { name: 'Tab Telmisartan 40mg', qty: '1 strip' }
+        ] : [
+          { name: 'Tab Telmisartan 40mg', qty: '1 strip' }
+        ]).map((it, i) => `${i + 1}. ${it.name} - ${it.qty}`).join('\n')}\nAddress: ${parentAddress}.\nPayment: UPI ₹${isMother ? '340' : '180'} will be transferred upon delivery receipt. Thank you!`
       }
     },
     {

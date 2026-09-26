@@ -7,5 +7,6 @@
 import { run } from './harness';
 import './extractionDiff.test';
 import './clinicalNormalizer.test';
+import './demoConsistency.test';
 
 run();
