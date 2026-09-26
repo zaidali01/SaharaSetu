@@ -39,7 +39,10 @@ app.post('/webhook', (req, res) => {
 });
 
 // ─── Start Server
-app.listen(PORT, () => {
+const { initializeDatabase } = require('./initDb');
+
+app.listen(PORT, async () => {
+  await initializeDatabase();
   console.log(`
 ╔════════════════════════════════════════════╗
 ║     SaharaSetu Backend — Track C           ║
