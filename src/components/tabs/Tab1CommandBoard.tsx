@@ -64,11 +64,11 @@ export const Tab1CommandBoard: React.FC = () => {
   return (
     <div className="space-y-6 pb-20">
       
-      {/* Freelance Metric Stat Strip: Unified horizontal card with vertical dividers */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200/80">
+      {/* Layer 2 Surface: Crisp White Segmented KPI Stat Banner */}
+      <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 mb-6 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200">
         
         {/* Stat 1 */}
-        <div className="p-4 flex items-center justify-between">
+        <div className="p-2 sm:px-4 flex items-center justify-between">
           <div>
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
               Operations Done Today
@@ -80,13 +80,13 @@ export const Tab1CommandBoard: React.FC = () => {
               </span>
             </div>
           </div>
-          <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200/70 text-emerald-700 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200/70 text-emerald-700 flex items-center justify-center shrink-0">
             <CheckCircle className="w-4 h-4" />
           </div>
         </div>
 
         {/* Stat 2 */}
-        <div className="p-4 flex items-center justify-between">
+        <div className="p-2 sm:px-4 flex items-center justify-between">
           <div>
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
               Awaiting Sign-off (Financial Gate)
@@ -100,13 +100,13 @@ export const Tab1CommandBoard: React.FC = () => {
               </span>
             </div>
           </div>
-          <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200/70 text-amber-700 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200/70 text-amber-700 flex items-center justify-center shrink-0">
             <ShieldCheck className="w-4 h-4" />
           </div>
         </div>
 
         {/* Stat 3 */}
-        <div className="p-4 flex items-center justify-between">
+        <div className="p-2 sm:px-4 flex items-center justify-between">
           <div>
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
               Next Scheduled Check-in
@@ -120,7 +120,7 @@ export const Tab1CommandBoard: React.FC = () => {
               </span>
             </div>
           </div>
-          <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-200/70 text-indigo-700 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-200/70 text-indigo-700 flex items-center justify-center shrink-0">
             <Activity className="w-4 h-4" />
           </div>
         </div>
@@ -156,13 +156,13 @@ export const Tab1CommandBoard: React.FC = () => {
         </span>
       </div>
 
-      {/* Tri-Column Kanban Grid with Enhanced bg-slate-200/60 Wells */}
+      {/* Tri-Column Kanban Grid: Layer 1 (Column Wells) -> Layer 2 (Pure Crisp White Cards) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* =========================================================================
-            COLUMN 1: DONE & VERIFIED (Emerald Dot)
+            COLUMN 1: DONE & VERIFIED (Layer 1 Well)
         ========================================================================= */}
-        <div className="bg-slate-200/60 border border-slate-300/70 rounded-2xl p-4 min-h-[650px] space-y-4">
+        <div className="bg-slate-200/60 border border-slate-300/60 rounded-2xl p-4 min-h-[640px] space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
@@ -175,7 +175,7 @@ export const Tab1CommandBoard: React.FC = () => {
             </span>
           </div>
 
-          {/* Cards List */}
+          {/* Cards List: Layer 2 Surface */}
           <div className="space-y-3">
             <AnimatePresence>
               {doneTasks.map((task) => (
@@ -185,7 +185,7 @@ export const Tab1CommandBoard: React.FC = () => {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 cursor-grab space-y-3"
+                  className="bg-white rounded-xl p-4 border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 cursor-grab space-y-3"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2.5">
@@ -251,9 +251,9 @@ export const Tab1CommandBoard: React.FC = () => {
 
 
         {/* =========================================================================
-            COLUMN 2: NEEDS YOUR APPROVAL (Amber Dot - Task 4.4 Payment Queue)
+            COLUMN 2: NEEDS YOUR APPROVAL (Layer 1 Well)
         ========================================================================= */}
-        <div className="bg-slate-200/60 border border-slate-300/70 rounded-2xl p-4 min-h-[650px] space-y-4">
+        <div className="bg-slate-200/60 border border-slate-300/60 rounded-2xl p-4 min-h-[640px] space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
@@ -266,7 +266,7 @@ export const Tab1CommandBoard: React.FC = () => {
             </span>
           </div>
 
-          {/* Cards List */}
+          {/* Cards List: Layer 2 Surface */}
           <div className="space-y-3">
             <AnimatePresence>
               {needsApprovalTasks.map((task) => (
@@ -276,7 +276,7 @@ export const Tab1CommandBoard: React.FC = () => {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
-                  className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 cursor-grab space-y-3"
+                  className="bg-white rounded-xl p-4 border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 cursor-grab space-y-3"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2.5">
@@ -376,9 +376,9 @@ export const Tab1CommandBoard: React.FC = () => {
 
 
         {/* =========================================================================
-            COLUMN 3: COULDN'T COMPLETE / BLOCKERS (Rose Dot)
+            COLUMN 3: COULDN'T COMPLETE / BLOCKERS (Layer 1 Well)
         ========================================================================= */}
-        <div className="bg-slate-200/60 border border-slate-300/70 rounded-2xl p-4 min-h-[650px] space-y-4">
+        <div className="bg-slate-200/60 border border-slate-300/60 rounded-2xl p-4 min-h-[640px] space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
@@ -391,7 +391,7 @@ export const Tab1CommandBoard: React.FC = () => {
             </span>
           </div>
 
-          {/* Cards List */}
+          {/* Cards List: Layer 2 Surface */}
           <div className="space-y-3">
             <AnimatePresence>
               {blockedTasks.map((task) => (
@@ -400,7 +400,7 @@ export const Tab1CommandBoard: React.FC = () => {
                   layout
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 cursor-grab space-y-3"
+                  className="bg-white rounded-xl p-4 border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 cursor-grab space-y-3"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2.5">

@@ -23,7 +23,7 @@ export const Navbar: React.FC = () => {
   const unresolvedFlags = criticalFlags.filter((f) => !f.resolved);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-6 w-full py-3">
         <div className="flex items-center justify-between gap-4">
           

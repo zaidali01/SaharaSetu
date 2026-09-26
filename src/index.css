@@ -5,7 +5,7 @@
 @layer base {
   body {
     @apply bg-[#F1F5F9] text-slate-900 antialiased selection:bg-slate-900 selection:text-white font-sans;
-    background-image: radial-gradient(#cbd5e1 1.5px, transparent 1.5px);
+    background-image: radial-gradient(rgba(148, 163, 184, 0.18) 1px, transparent 1px);
     background-size: 20px 20px;
     background-attachment: fixed;
   }
