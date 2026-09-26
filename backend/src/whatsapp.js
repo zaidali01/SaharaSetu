@@ -20,6 +20,12 @@ async function sendWhatsAppMessage(to, templateName, params, opts = {}) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const language = opts.language || process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US';
   const dryRun = process.env.WHATSAPP_DRY_RUN === 'true';
+  // Template name is env-configurable because Meta's *test* WABA cannot create
+  // templates ("account restricted from creating a new template"). It ships
+  // Meta's own APPROVED `jaspers_market_order_confirmation_v1`, which has the
+  // same 3 positional body placeholders as the intended order_confirmation.
+  // On a real WABA, create `order_confirmation` and flip this var.
+  const template = templateName || process.env.WHATSAPP_TEMPLATE_NAME || 'order_confirmation';
 
   // Normalise to bare digits. WhatsApp rejects '+' and separators, and a stale
   // formatted number from the vendors table is a common dispatch failure.
@@ -29,10 +35,10 @@ async function sendWhatsAppMessage(to, templateName, params, opts = {}) {
     const reason = dryRun ? 'WHATSAPP_DRY_RUN=true' : 'missing credentials';
     console.log(
       `[WhatsApp ${dryRun ? 'DRY RUN' : 'Mock'}] (${reason}) would send template ` +
-      `'${templateName}' [${language}] to ${recipient} with params:`,
+      `'${template}' [${language}] to ${recipient} with params:`,
       params
     );
-    return { id: `dry-run-${Date.now()}`, status: dryRun ? 'dry_run' : 'mocked', recipient, templateName, language, params };
+    return { id: `dry-run-${Date.now()}`, status: dryRun ? 'dry_run' : 'mocked', recipient, templateName: template, language, params };
   }
 
   const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
@@ -42,7 +48,7 @@ async function sendWhatsAppMessage(to, templateName, params, opts = {}) {
     to: recipient,
     type: "template",
     template: {
-      name: templateName,
+      name: template,
       language: { code: language },
       components: [{
         type: "body",
@@ -65,7 +71,18 @@ async function sendWhatsAppMessage(to, templateName, params, opts = {}) {
     if (!response.ok) {
       throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
     }
-    return data; // contains message ID
+    // The Graph API nests the id under messages[0].id, but the dry-run/mock
+    // branches above return a flat { id }. Normalise so callers can always read
+    // `.id` — previously actionTaker checked waResult.id and reported every
+    // genuine send as "failed".
+    return {
+      id: data.messages?.[0]?.id,
+      status: data.messages?.[0]?.message_status || 'sent',
+      recipient: data.contacts?.[0]?.wa_id || recipient,
+      templateName: template,
+      language,
+      raw: data,
+    };
   } catch (err) {
     console.error('[WhatsApp Error]', err.message);
     throw err;

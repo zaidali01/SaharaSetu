@@ -142,7 +142,11 @@ async function dispatchMedicineOrder(task, callId, transcript, parentResponse) {
     try {
       waResult = await sendWhatsAppMessage(
         chemistPhone,
-        'order_confirmation', // Must match an APPROVED template in Meta
+        // Falls back to WHATSAPP_TEMPLATE_NAME. The intended template is
+        // `order_confirmation`, but Meta's test WABA cannot create templates, so
+        // the default is Meta's own APPROVED order-confirmation sample, which
+        // takes the same 3 positional body params.
+        process.env.WHATSAPP_TEMPLATE_NAME || 'order_confirmation',
         [medicineName, quantity, deliveryAddress],
         { language: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US' }
       );
