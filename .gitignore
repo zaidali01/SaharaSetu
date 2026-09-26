@@ -1,10 +1,13 @@
 # Dependencies
 node_modules/
+dist/
+dist-ssr/
 
 # Secrets — never commit these
 .env
 .env.local
 .env.*.local
+*.local
 
 # Runtime-generated, not source code
 voice-agent/public/audio/*.wav
@@ -12,13 +15,24 @@ voice-agent/alerts.json
 alerts.json
 
 # Logs
-npm-debug.log*
+logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # OS junk
 .DS_Store
 Thumbs.db
 
-# Editor folders
-.vscode/
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

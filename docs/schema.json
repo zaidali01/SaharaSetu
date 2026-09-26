@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Task Schema",
+  "description": "Shared contract for task data across all SaharaSetu tracks",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Unique identifier for the task"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["medicine_order", "gas_booking"],
+      "description": "The type of task being requested"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the task needs to be completed by"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "awaiting_call",
+        "awaiting_approval",
+        "done",
+        "couldnt_complete"
+      ],
+      "description": "Current state of the task in the system"
+    },
+    "confidence_score": {
+      "type": "number",
+      "description": "Confidence score from the OCR/LLM extraction (0.0 to 1.0)"
+    },
+    "action_log": {
+      "type": "array",
+      "description": "Audit trail of all automated and manual actions on this task",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "type": "string",
+            "description": "Who performed the action (e.g., 'planner', 'voice_agent', 'parent', 'admin')"
+          },
+          "action": {
+            "type": "string",
+            "description": "What was done (e.g., 'call_initiated', 'payment_approved')"
+          },
+          "result": {
+            "type": "string",
+            "description": "Outcome of the action (e.g., 'success', 'failed_no_answer')"
+          }
+        },
+        "required": ["timestamp", "actor", "action", "result"]
+      }
+    }
+  },
+  "required": ["task_id", "type", "due_date", "status", "action_log"]
+}
