@@ -17,7 +17,9 @@ export const Navbar: React.FC = () => {
     setIsGuardrailsOpen, 
     setIsAlertsDrawerOpen, 
     setIsParentProfileOpen, 
-    criticalFlags 
+    criticalFlags,
+    backendStatus,
+    refreshFromBackend 
   } = useApp();
 
   const unresolvedFlags = criticalFlags.filter((f) => !f.resolved);
@@ -72,6 +74,21 @@ export const Navbar: React.FC = () => {
           {/* Right Action Badges: Guaranteed safe right margin (pr-2 sm:pr-4) to prevent any screen edge clipping */}
           <div className="flex items-center gap-2.5 pr-2 sm:pr-4">
             
+            {/* Backend Connectivity Status (Task 2.6i) */}
+            <button
+              onClick={() => refreshFromBackend()}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer active:scale-[0.98] ${
+                backendStatus === 'connected'
+                  ? 'bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-800 border border-emerald-200'
+                  : 'bg-amber-50/80 hover:bg-amber-100/80 text-amber-800 border border-amber-200'
+              }`}
+              title="Click to manually refresh from Track C Backend & Database"
+            >
+              <span className={`w-2 h-2 rounded-full ${backendStatus === 'connected' ? 'bg-emerald-500 radar-live' : 'bg-amber-500'}`} />
+              <span className="hidden sm:inline">Track C: {backendStatus === 'connected' ? 'Live (Port 4000)' : 'Offline Grounded'}</span>
+              <span className="sm:hidden">{backendStatus === 'connected' ? 'Live' : 'Mock'}</span>
+            </button>
+
             {/* Guardrails Verification Badge */}
             <button
               onClick={() => setIsGuardrailsOpen(true)}

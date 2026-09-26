@@ -58,7 +58,9 @@ app.listen(PORT, () => {
 
   // ─── Start Planner (every 5 minutes)
   const PLANNER_INTERVAL_MS = 5 * 60 * 1000;
-  runPlanner(); // Run immediately on startup
-  setInterval(runPlanner, PLANNER_INTERVAL_MS);
+  runPlanner().catch(err => console.warn('[PLANNER] DB offline (will retry on next interval):', err.message));
+  setInterval(() => {
+    runPlanner().catch(err => console.warn('[PLANNER] DB offline:', err.message));
+  }, PLANNER_INTERVAL_MS);
   console.log(`\n[PLANNER] Scheduling every ${PLANNER_INTERVAL_MS / 60000} minutes.`);
 });

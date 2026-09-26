@@ -27,7 +27,9 @@ export const Tab2DocumentIntake: React.FC = () => {
     documents,
     activeDocument,
     setActiveDocument,
-    uploadDocument
+    uploadDocument,
+    isOcrProcessing,
+    backendStatus
   } = useApp();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -46,29 +48,43 @@ export const Tab2DocumentIntake: React.FC = () => {
     );
   };
 
-  const triggerScanAnimation = (fileName: string) => {
+  const triggerScanAnimation = async (fileInput: File | string) => {
     setIsScanning(true);
-    setScanProgress(0);
+    setScanProgress(20);
     playSound('ping');
 
-    let current = 0;
-    const interval = setInterval(() => {
-      current += 25;
-      setScanProgress(Math.min(100, current));
-      if (current >= 100) {
-        clearInterval(interval);
-        setTimeout(() => {
-          setIsScanning(false);
-          playSound('approval');
-          uploadDocument({ name: fileName });
-        }, 300);
+    const fileName = typeof fileInput === 'string' ? fileInput : fileInput.name;
+
+    // Smooth visual progress indicating Vision OCR stages
+    const timer1 = setTimeout(() => setScanProgress(55), 250);
+    const timer2 = setTimeout(() => setScanProgress(85), 550);
+
+    try {
+      if (typeof fileInput === 'string') {
+        await uploadDocument({ name: fileName });
+      } else {
+        await uploadDocument(fileInput);
       }
-    }, 200);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      setScanProgress(100);
+      setTimeout(() => {
+        setIsScanning(false);
+        playSound('approval');
+      }, 350);
+    } catch {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      setScanProgress(100);
+      setTimeout(() => {
+        setIsScanning(false);
+      }, 350);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      triggerScanAnimation(e.target.files[0].name);
+      triggerScanAnimation(e.target.files[0]);
     }
   };
 
@@ -91,10 +107,16 @@ export const Tab2DocumentIntake: React.FC = () => {
           </p>
         </div>
 
-        {/* Safety Indicator Badge */}
-        <div className="flex items-center gap-2 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200 text-emerald-800 text-xs font-semibold shrink-0">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>Anti-Hallucination Safe Review</span>
+        {/* Safety & Pipeline Indicator Badges */}
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <div className="flex items-center gap-1.5 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200 text-indigo-800 text-xs font-semibold">
+            <ScanLine className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Track B Vision OCR: {backendStatus === 'connected' ? 'Live Multimodal Engine' : 'Grounded Fallback Engine'}</span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-800 text-xs font-semibold">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Anti-Hallucination Safe Review</span>
+          </div>
         </div>
       </div>
 
@@ -152,7 +174,11 @@ export const Tab2DocumentIntake: React.FC = () => {
             onDrop={(e) => {
               e.preventDefault();
               setIsDragging(false);
-              triggerScanAnimation('dr_verma_prescription_pmch.pdf');
+              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                triggerScanAnimation(e.dataTransfer.files[0]);
+              } else {
+                triggerScanAnimation('dr_verma_prescription_pmch.pdf');
+              }
             }}
             className={`p-5 rounded-2xl border-2 border-dashed transition-all text-center cursor-pointer ${
               isDragging
@@ -181,7 +207,7 @@ export const Tab2DocumentIntake: React.FC = () => {
 
           {/* Scanning Progress Overlay / Skeleton if active */}
           <AnimatePresence>
-            {isScanning && (
+            {(isScanning || isOcrProcessing) && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -191,18 +217,18 @@ export const Tab2DocumentIntake: React.FC = () => {
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-2 font-mono text-teal-300">
                     <ScanLine className="w-4 h-4 animate-pulse text-teal-400" />
-                    AI Vision OCR running...
+                    Track B Multimodal Vision OCR running...
                   </span>
                   <span className="font-mono text-xs text-teal-400 font-bold">{scanProgress}%</span>
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
                   <motion.div
-                    className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full"
+                    className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-300"
                     style={{ width: `${scanProgress}%` }}
                   />
                 </div>
                 <p className="text-[10px] text-slate-400 font-mono">
-                  Detecting bounding boxes & matching clinical NDC registry tokens...
+                  Vision pipeline: Segmenting bounding boxes, extracting medicines, NDC verification & dosage guardrails...
                 </p>
               </motion.div>
             )}

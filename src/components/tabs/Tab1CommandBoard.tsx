@@ -16,7 +16,8 @@ import {
   ShieldCheck,
   CheckCircle,
   FileSearch,
-  Activity
+  Activity,
+  RefreshCw
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -29,7 +30,9 @@ export const Tab1CommandBoard: React.FC = () => {
     setActiveWhatsAppTask, 
     setActiveChemistModalTask,
     setActiveAuditTask,
-    activeParent
+    activeParent,
+    backendStatus,
+    refreshFromBackend
   } = useApp();
 
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -151,9 +154,19 @@ export const Tab1CommandBoard: React.FC = () => {
           ))}
         </div>
 
-        <span className="text-xs text-slate-500 font-medium">
-          Showing {filteredTasks.length} active items for {activeParent.name} ({activeParent.location.split(',')[0]})
-        </span>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => refreshFromBackend()}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            title="Poll Track C task queue and telemetry log"
+          >
+            <RefreshCw className="w-3 h-3 text-slate-500" />
+            <span>Sync Tasks ({backendStatus === 'connected' ? 'Live' : 'Cached'})</span>
+          </button>
+          <span className="text-xs text-slate-500 font-medium">
+            Showing {filteredTasks.length} active items for {activeParent.name} ({activeParent.location.split(',')[0]})
+          </span>
+        </div>
       </div>
 
       {/* Tri-Column Kanban Grid: Layer 1 (Column Wells) -> Layer 2 (Pure Crisp White Cards) */}

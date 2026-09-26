@@ -140,7 +140,7 @@ export interface AgentNode {
 export interface EventLogItem {
   id: string;
   timestamp: string;
-  agentSource: 'Sarvam Caller Agent' | 'Postgres State Planner' | 'WhatsApp/UPI Action Agent' | 'Guardrail Engine';
+  agentSource: 'Sarvam Caller Agent' | 'Postgres State Planner' | 'WhatsApp/UPI Action Agent' | 'Guardrail Engine' | 'Track B Vision OCR Pipeline';
   eventType: string;
   severity: 'info' | 'success' | 'warning' | 'critical';
   details: string;
