@@ -529,14 +529,14 @@ export const Tab2DocumentIntake: React.FC = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left text-xs border-collapse min-w-[650px]">
                   <thead>
                     <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="px-3 py-2.5">Medicine & Strength</th>
-                      <th className="px-3 py-2.5">Category</th>
-                      <th className="px-3 py-2.5">Cadence</th>
-                      <th className="px-3 py-2.5">Next Refill Date</th>
-                      <th className="px-3 py-2.5 text-right">Confidence</th>
+                      <th className="px-3.5 py-2.5 min-w-[240px]">Medicine & Strength</th>
+                      <th className="px-3 py-2.5 min-w-[95px]">Category</th>
+                      <th className="px-3 py-2.5 min-w-[190px]">Cadence</th>
+                      <th className="px-3 py-2.5 min-w-[160px]">Next Refill Date</th>
+                      <th className="px-3 py-2.5 text-right min-w-[90px]">Confidence</th>
                       <th className="px-2 py-2.5 text-center w-8"></th>
                     </tr>
                   </thead>
@@ -554,43 +554,46 @@ export const Tab2DocumentIntake: React.FC = () => {
                           }`}
                         >
                           {/* Medicine Name & Dosage */}
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <span className="w-4 h-4 rounded bg-slate-200 text-slate-700 flex items-center justify-center font-mono text-[9px] font-bold shrink-0">
+                          <td className="px-3.5 py-2.5 min-w-[240px]">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-5 h-5 rounded-md bg-slate-200 text-slate-700 flex items-center justify-center font-mono text-[10px] font-bold shrink-0">
                                 {idx + 1}
                               </span>
-                              <div className="space-y-0.5">
+                              <div className="space-y-0.5 flex-1 min-w-0">
                                 <input
                                   type="text"
                                   value={item.medicineName}
                                   onChange={(e) => handleNameChange(item.id, e.target.value)}
-                                  className="font-semibold text-slate-900 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none w-full"
+                                  className="font-bold text-slate-900 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none w-full"
+                                  placeholder="Medicine Name (e.g. Tab. Valsartan)"
                                 />
                                 <input
                                   type="text"
                                   value={item.dosage}
                                   onChange={(e) => handleDosageChange(item.id, e.target.value)}
-                                  className="text-[10px] text-slate-500 font-mono bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none w-full"
+                                  className="text-[11px] text-slate-500 font-mono font-medium bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none w-full"
+                                  placeholder="Dosage (e.g. 80mg)"
                                 />
                               </div>
                             </div>
                           </td>
 
                           {/* Category Badge */}
-                          <td className="px-3 py-2">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                          <td className="px-3 py-2.5">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
                               {item.category}
                             </span>
                           </td>
 
                           {/* Frequency Dropdown */}
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-2.5">
                             <select
                               value={item.frequency}
                               onChange={(e) => handleFrequencyChange(item.id, e.target.value)}
-                              className="bg-white border border-slate-300 rounded px-1.5 py-1 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-teal-500"
+                              className="bg-white border border-slate-300 rounded px-1.5 py-1 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-teal-500 w-full max-w-[190px]"
                             >
                               <option value="Once Daily (Morning)">Once Daily (Morning)</option>
+                              <option value="Once Daily (Evening)">Once Daily (Evening)</option>
                               <option value="Twice Daily (Morning & Night)">Twice Daily (Morning & Night)</option>
                               <option value="At Bedtime (Night)">At Bedtime (Night)</option>
                               <option value="As Needed (SOS)">As Needed (SOS)</option>
@@ -599,21 +602,21 @@ export const Tab2DocumentIntake: React.FC = () => {
                           </td>
 
                           {/* Next Refill Trigger Time */}
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-1 text-slate-600 font-mono text-[11px]">
-                              <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1.5 text-slate-600 font-mono text-[11px]">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                               <input
                                 type="text"
                                 value={item.nextTriggerTime}
                                 onChange={(e) => handleTriggerTimeChange(item.id, e.target.value)}
-                                className="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none text-[11px] font-mono text-slate-700"
+                                className="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none text-[11px] font-mono text-slate-700 w-full"
                               />
                             </div>
                           </td>
 
                           {/* Confidence Metric */}
-                          <td className="px-3 py-2 text-right">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                          <td className="px-3 py-2.5 text-right">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold whitespace-nowrap ${
                               isHighConfidence
                                 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                                 : 'bg-amber-50 text-amber-800 border border-amber-200'
