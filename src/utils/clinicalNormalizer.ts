@@ -357,7 +357,64 @@ export function parseUploadedDocument(
     };
   }
 
-  // 4. Custom Upload Prescription (Dr. Vikram Rao / Patient: Anita Sharma)
+  // 4. Dr. Manisha Sinha / Shanti Devi (Endocrine & Thyroid Clinic, Patna)
+  if (nameLower.includes('sinha') || nameLower.includes('manisha') || nameLower.includes('shanti') || nameLower.includes('thyroid')) {
+    const items: ExtractedItem[] = [
+      {
+        id: 'ocr-' + Date.now() + '-1',
+        name: 'Tab. Thyronorm',
+        dosage: '50 mcg',
+        category: 'Thyroid',
+        ...normalizeFrequency('OD'),
+        confidenceScore: 0.98,
+        rawOcrText: 'Tab. Thyronorm 50mcg OD (Empty Stomach)',
+        sourceBox: { top: 36, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'ocr-' + Date.now() + '-2',
+        name: 'Tab. Telmisartan',
+        dosage: '40 mg',
+        category: 'Cardio',
+        ...normalizeFrequency('OD'),
+        confidenceScore: 0.97,
+        rawOcrText: 'Tab. Telmisartan 40mg OD (Post Breakfast)',
+        sourceBox: { top: 46, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      },
+      {
+        id: 'ocr-' + Date.now() + '-3',
+        name: 'Tab. Rosuvastatin',
+        dosage: '10 mg',
+        category: 'Lipid',
+        ...normalizeFrequency('HS'),
+        confidenceScore: 0.95,
+        rawOcrText: 'Tab. Rosuvastatin 10mg HS (Bedtime)',
+        sourceBox: { top: 56, left: 12, width: 76, height: 7 },
+        status: 'verified'
+      }
+    ];
+
+    return {
+      id: docId,
+      parentId: parent.id,
+      fileName,
+      docType: 'PRESCRIPTION',
+      previewImageUrl,
+      issuer: {
+        title: 'Dr. Manisha Sinha, M.D., D.N.B.',
+        subtitle: 'Senior Consultant Endocrinologist & Diabetologist',
+        address: 'Boring Canal Road, Patna - 800001',
+        regOrConsumer: 'BCMR / 2011 / 9923'
+      },
+      patientOrConsumerName: 'Shanti Devi (64 Yrs • Boring Road, Patna)',
+      consultDate: '25-Sep-2026',
+      vitalsOrSummary: 'BP: 122/78, Fasting: 108 mg/dL, TSH: 2.4',
+      extractedItems: items
+    };
+  }
+
+  // 5. Custom Upload Prescription (Dr. Vikram Rao / Patient: Anita Sharma)
   const items: ExtractedItem[] = [
     {
       id: 'ocr-' + Date.now() + '-1',

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   UploadCloud, ShieldAlert, CheckCircle2, Sparkles, Clock, ArrowRight,
-  ShieldCheck, ScanLine, FileText, Plus
+  ShieldCheck, ScanLine, FileText, Plus, Trash2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PrescriptionCanvas } from '../prescription/PrescriptionCanvas';
@@ -24,6 +24,35 @@ export const Tab2DocumentIntake: React.FC = () => {
 
   const handleNameChange = (id: string, newName: string) =>
     setPrescriptionItems(prev => prev.map(item => item.id === id ? { ...item, medicineName: newName } : item));
+
+  const handleAddItem = () => {
+    const newItem = {
+      id: `rx-manual-${Date.now()}`,
+      medicineName: 'Tab. Paracetamol',
+      dosage: '500 mg',
+      frequency: 'As Needed (SOS)',
+      frequencyCode: 'SOS',
+      instruction: 'Take 1 tablet in case of acute pain or fever',
+      nextTriggerTime: 'On-Demand (SOS Trigger)',
+      confidence: 1.0,
+      sourceBox: { top: 72, left: 12, width: 76, height: 7 },
+      status: 'verified' as const,
+      category: 'General',
+      rawOcrText: 'Tab. Paracetamol 500mg SOS (Manual Addition)'
+    };
+    setPrescriptionItems(prev => [...prev, newItem]);
+    setSelectedRxId(newItem.id);
+    playSound('ping');
+  };
+
+  const handleRemoveItem = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPrescriptionItems(prev => prev.filter(item => item.id !== id));
+    if (selectedRxId === id) {
+      const remaining = prescriptionItems.filter(p => p.id !== id);
+      if (remaining.length > 0) setSelectedRxId(remaining[0].id);
+    }
+  };
 
   const triggerScanAnimation = async (fileInput: File | string) => {
     setIsScanning(true); setScanProgress(20); playSound('ping');
@@ -71,9 +100,9 @@ export const Tab2DocumentIntake: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Document switcher ── */}
-      <div className="card" style={{ padding: '10px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto' }}>
+      {/* ── Document switcher & Presets ── */}
+      <div className="card" style={{ padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', maxWidth: '100%' }}>
           <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Active Docs:</span>
           {documents.map(doc => {
             const isActive = activeDocument.id === doc.id;
@@ -102,9 +131,55 @@ export const Tab2DocumentIntake: React.FC = () => {
             );
           })}
         </div>
-        <button onClick={() => triggerScanAnimation(`rx_dr_jha_${Date.now().toString().slice(-4)}.pdf`)} className="btn btn-outline" style={{ fontSize: 13 }}>
-          <Plus size={14} /> Simulate Upload
-        </button>
+
+        {/* Quick Grounded Testing Presets */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Presets:</span>
+          <button
+            type="button"
+            onClick={() => triggerScanAnimation('dr_verma_prescription_pmch.pdf')}
+            className="btn btn-outline"
+            style={{ fontSize: 11, padding: '5px 8px' }}
+            title="Dr. S. K. Verma (Patna Cardiology)"
+          >
+            🩺 Dr. Verma
+          </button>
+          <button
+            type="button"
+            onClick={() => triggerScanAnimation('dr_roy_orthopedic_patna.pdf')}
+            className="btn btn-outline"
+            style={{ fontSize: 11, padding: '5px 8px' }}
+            title="Dr. Anita Roy (Patna Orthopedic)"
+          >
+            🦴 Dr. Roy
+          </button>
+          <button
+            type="button"
+            onClick={() => triggerScanAnimation('sbpdcl_patna_electric_bill.pdf')}
+            className="btn btn-outline"
+            style={{ fontSize: 11, padding: '5px 8px' }}
+            title="SBPDCL Patna Electricity Bill"
+          >
+            ⚡ SBPDCL
+          </button>
+          <button
+            type="button"
+            onClick={() => triggerScanAnimation('dr_sinha_patna_thyroid.pdf')}
+            className="btn btn-outline"
+            style={{ fontSize: 11, padding: '5px 8px' }}
+            title="Dr. Manisha Sinha (Endocrinology)"
+          >
+            💊 Dr. Sinha
+          </button>
+          <button
+            type="button"
+            onClick={() => triggerScanAnimation(`rx_dr_jha_${Date.now().toString().slice(-4)}.pdf`)}
+            className="btn btn-outline"
+            style={{ fontSize: 11, padding: '5px 10px', background: 'var(--surface-secondary)' }}
+          >
+            <Plus size={13} /> Simulate
+          </button>
+        </div>
       </div>
 
       {/* ── Two-column layout ── */}
@@ -188,7 +263,7 @@ export const Tab2DocumentIntake: React.FC = () => {
 
           {/* Verification table */}
           <div className="card" style={{ overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-ink)', marginBottom: 2 }}>
                   Pre-Activation Schedule Verification
@@ -197,15 +272,25 @@ export const Tab2DocumentIntake: React.FC = () => {
                   Anti-hallucination safe review before syncing to IVR
                 </p>
               </div>
-              <span className="badge badge-success">{prescriptionItems.length} Items</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="btn btn-outline"
+                  style={{ fontSize: 12, padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 5 }}
+                >
+                  <Plus size={13} /> Add Item
+                </button>
+                <span className="badge badge-success">{prescriptionItems.length} Items</span>
+              </div>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-light)', background: 'var(--surface-secondary)' }}>
-                    {['Medicine & Strength', 'Category', 'Cadence', 'Next Refill', 'Confidence'].map(h => (
-                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                    {['Medicine & Strength', 'Category', 'Cadence', 'Trigger Slot', 'Confidence', 'Action'].map(h => (
+                      <th key={h} style={{ padding: '12px 14px', textAlign: h === 'Action' ? 'center' : 'left', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -223,7 +308,7 @@ export const Tab2DocumentIntake: React.FC = () => {
                           cursor: 'pointer', transition: 'background 0.15s'
                         }}
                       >
-                        <td style={{ padding: '12px 16px' }}>
+                        <td style={{ padding: '12px 14px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ width: 24, height: 24, borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</span>
                             <div>
@@ -237,10 +322,10 @@ export const Tab2DocumentIntake: React.FC = () => {
                             </div>
                           </div>
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
+                        <td style={{ padding: '12px 14px' }}>
                           <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', color: 'var(--text-muted)' }}>{item.category}</span>
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
+                        <td style={{ padding: '12px 14px' }}>
                           <select
                             value={item.frequency}
                             onChange={e => handleFrequencyChange(item.id, e.target.value)}
@@ -249,18 +334,39 @@ export const Tab2DocumentIntake: React.FC = () => {
                             <option value="Once Daily (Morning)">Once Daily</option>
                             <option value="Twice Daily (Morning & Night)">Twice Daily</option>
                             <option value="At Bedtime (Night)">At Bedtime</option>
+                            <option value="Once Weekly">Once Weekly</option>
                             <option value="As Needed (SOS)">As Needed</option>
                           </select>
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
+                        <td style={{ padding: '12px 14px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 13 }}>
                             <Clock size={14} /> {item.nextTriggerTime}
                           </div>
                         </td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <td style={{ padding: '12px 14px' }}>
                           <span className={`badge ${isHigh ? 'badge-success' : 'badge-review'}`}>
                             <Sparkles size={12} /> {(item.confidence * 100).toFixed(0)}%
                           </span>
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => handleRemoveItem(item.id, e)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              cursor: 'pointer',
+                              padding: 4,
+                              borderRadius: 'var(--radius-sm)',
+                              transition: 'color 0.15s'
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.color = '#dc2626')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                            title="Remove item"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </td>
                       </tr>
                     );
