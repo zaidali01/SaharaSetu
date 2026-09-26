@@ -13,6 +13,11 @@ const { logAction } = require('./logger');
 // TASKS
 // ────────────────────────────────────────────────────────────────
 
+/** States a client may set directly on create. `done` / `couldnt_complete`
+ *  are terminal and must only be reached via transitionTask() so that every
+ *  state change lands in action_log. */
+const PRE_ACTIVATION_STATUSES = ['pending', 'awaiting_call', 'awaiting_approval'];
+
 /** GET /api/tasks — list all tasks (with optional status filter) */
 router.get('/tasks', async (req, res) => {
   try {
@@ -43,18 +48,41 @@ router.get('/tasks/:id', async (req, res) => {
 /** POST /api/tasks — create a new task */
 router.post('/tasks', async (req, res) => {
   try {
-    const { parent_id, task_type, title, description, due_date, amount, confidence_score, source_document_id } = req.body;
+    const { parent_id, task_type, title, description, due_date, amount, confidence_score, source_document_id, status, payload } = req.body;
+
+    // Only pre-activation states may be set explicitly. Terminal states must be
+    // reached through the state machine so every transition is audited.
+    if (status && !PRE_ACTIVATION_STATUSES.includes(status)) {
+      return res.status(400).json({
+        error: `Invalid initial status "${status}". Must be one of ${PRE_ACTIVATION_STATUSES.join(', ')}.`
+      });
+    }
+
+    // `payload` carries the per-task action arguments the Action-Taker needs to
+    // build an external message (medicine name, quantity, delivery address).
+    // Falls back to the parent's real address so a caller that omits it still
+    // produces a usable order rather than a placeholder.
+    let actionPayload = payload && typeof payload === 'object' ? payload : null;
+    if (!actionPayload && parent_id) {
+      const { rows: parentRows } = await pool.query('SELECT address FROM users WHERE id = $1', [parent_id]);
+      actionPayload = {
+        medicine_name: title,
+        quantity: description || '1 month supply',
+        delivery_address: parentRows[0]?.address || 'Parent Home Address',
+      };
+    }
+
     const { rows } = await pool.query(
-      `INSERT INTO tasks (parent_id, task_type, title, description, due_date, amount, confidence_score, source_document_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [parent_id, task_type, title, description, due_date, amount, confidence_score, source_document_id]
+      `INSERT INTO tasks (parent_id, task_type, title, description, due_date, amount, confidence_score, source_document_id, status, payload)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, 'pending'), $10) RETURNING *`,
+      [parent_id || null, task_type, title, description, due_date || null, amount, confidence_score, source_document_id || null, status || null, actionPayload ? JSON.stringify(actionPayload) : null]
     );
     await logAction({
       taskId: rows[0].id,
       actor: 'system',
       action: 'task_created',
       result: 'success',
-      payload: { task_type, source_document_id },
+      payload: { task_type, source_document_id, initial_status: rows[0].status, has_action_payload: !!actionPayload },
     });
     res.status(201).json(rows[0]);
   } catch (err) {

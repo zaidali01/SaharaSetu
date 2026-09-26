@@ -88,10 +88,17 @@ CREATE TABLE IF NOT EXISTS documents (
   uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 7. Add FK back to tasks from documents
-ALTER TABLE tasks
-  ADD CONSTRAINT fk_tasks_document
-  FOREIGN KEY (source_document_id) REFERENCES documents(id) ON DELETE SET NULL;
+-- 7. Add FK back to tasks from documents (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'fk_tasks_document'
+  ) THEN
+    ALTER TABLE tasks
+      ADD CONSTRAINT fk_tasks_document
+      FOREIGN KEY (source_document_id) REFERENCES documents(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- 8. Auto-update updated_at on tasks
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -102,9 +109,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER tasks_updated_at
-BEFORE UPDATE ON tasks
-FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'tasks_updated_at'
+  ) THEN
+    CREATE TRIGGER tasks_updated_at
+    BEFORE UPDATE ON tasks
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+  END IF;
+END $$;
 
 -- 9. Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_tasks_status        ON tasks(status);

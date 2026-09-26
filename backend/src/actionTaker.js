@@ -121,21 +121,31 @@ async function dispatchMedicineOrder(task, callId, transcript, parentResponse) {
   const { rows } = await pool.query("SELECT * FROM vendors WHERE parent_id = $1 AND vendor_type = 'chemist' LIMIT 1", [task.parent_id]);
   const chemistPhone = rows.length > 0 ? rows[0].phone : null;
 
+  // Prefer the parent's real delivery address over the placeholder fallback.
+  let parentAddress = 'Parent Home Address';
+  if (task.parent_id) {
+    const { rows: parentRows } = await pool.query('SELECT address FROM users WHERE id = $1', [task.parent_id]);
+    if (parentRows[0]?.address) parentAddress = parentRows[0].address;
+  }
+
+  // task.payload is populated at task creation (migrations/003) and holds the
+  // extracted medicine details. Accept the camelCase shape the frontend sends
+  // as well, so a payload written by either producer works.
+  const p = task.payload || {};
+  const medicineName = p.medicine_name || p.medicineName || task.title || 'Prescription Medicines';
+  const quantity = p.quantity || task.description || '1 month supply';
+  const deliveryAddress = p.delivery_address || p.deliveryAddress || parentAddress;
+
   let waResult = null;
   // 2.5i: Wire Action-Taker output into WhatsApp message sends using templates
   if (chemistPhone) {
     try {
-      // In a real flow, task.payload would contain the extracted medicine_name, quantity, and delivery_address
-      const medicineName = task.payload?.medicine_name || 'Prescription Medicines';
-      const quantity = task.payload?.quantity || '1 month supply';
-      const deliveryAddress = task.payload?.delivery_address || 'Parent Home Address';
-
       waResult = await sendWhatsAppMessage(
         chemistPhone,
-        'order_confirmation', // Must match approved template in Meta Dashboard
-        [medicineName, quantity.toString(), deliveryAddress]
+        'order_confirmation', // Must match an APPROVED template in Meta
+        [medicineName, quantity, deliveryAddress],
+        { language: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US' }
       );
-      
       console.log(`[ACTION] WhatsApp template sent to chemist at ${chemistPhone}`);
     } catch (err) {
       console.error(`[ACTION] Failed to send WhatsApp message:`, err.message);
@@ -153,6 +163,8 @@ async function dispatchMedicineOrder(task, callId, transcript, parentResponse) {
       parent_response: parentResponse,
       chemistPhone,
       messageId: waResult?.id,
+      deliveryStatus: waResult?.status,
+      order: { medicineName, quantity, deliveryAddress },
       note: 'WhatsApp integration via Template (Task 3.5)',
     },
   });

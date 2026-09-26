@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { playSound } from '../utils/audio';
-import { apiService, onBackendStatusChange, getBackendStatus } from '../services/api';
+import { apiService, onBackendStatusChange, getBackendStatus, toTaskType } from '../services/api';
 import { processPrescriptionScan, convertToDocumentRecord } from '../services/geminiVision';
 import { 
   parseUploadedDocument, 
@@ -86,10 +86,10 @@ interface AppContextType {
   setDistressAlertModalData: (data: CriticalFlag | null) => void;
   
   // Highlighting & Actions
-  approveTask: (taskId: string) => void;
-  rejectTask: (taskId: string) => void;
+  approveTask: (taskId: string) => Promise<void>;
+  rejectTask: (taskId: string) => Promise<void>;
   resolveStockBlocker: (taskId: string, alternateChemist: string) => void;
-  approvePrescriptionSchedule: () => void;
+  approvePrescriptionSchedule: () => Promise<void>;
   
   // Demo & Guardrail Simulator Triggers (Phase 3 Tasks 3.1t & 3.2t)
   triggerSimulateMorningCall: () => void;
@@ -142,6 +142,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
   const [isOcrProcessing, setIsOcrProcessing] = useState<boolean>(false);
 
+  // Real Postgres UUID for the active parent. The dashboard's own parent
+  // ids ('parent-1', ...) are local-only and are rejected by the tasks
+  // foreign key, so every write must use this instead. Null when offline.
+  const [backendParentId, setBackendParentId] = useState<string | null>(null);
+
+  // Real Postgres UUID per local document id, so tasks.source_document_id
+  // satisfies its foreign key. Absent while offline.
+  const [backendDocIds, setBackendDocIds] = useState<Record<string, string>>({});
+
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Function to pull live tasks and logs from Track C Backend (Task 2.6i)
@@ -150,8 +159,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const isHealthy = await apiService.checkHealth();
       setBackendStatus(isHealthy ? 'connected' : 'offline');
 
-      // 1. Fetch remote tasks from Track C
-      const remoteTasks = await apiService.getTasks(undefined, activeParent.id);
+      // 1. Fetch remote tasks from Track C (scoped to the real parent UUID)
+      const remoteTasks = await apiService.getTasks(undefined, backendParentId ?? undefined);
       if (remoteTasks && remoteTasks.length > 0) {
         setTasks(prev => {
           const remoteMap = new Map(remoteTasks.map(t => [t.id, t]));
@@ -199,19 +208,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsub();
       clearInterval(interval);
     };
-  }, [activeParent.id]);
+  }, [backendParentId]);
 
   // Initial Backend Hydration (Optimistic & Offline-safe)
   useEffect(() => {
     let isMounted = true;
     const hydrateBackend = async () => {
-      // 1. Try fetching active parent
+      // 1. Resolve the real parent row so writes get a valid UUID foreign key
       const remoteParent = await apiService.getActiveParent();
-      if (remoteParent && isMounted) {
+      if (!isMounted) return;
+      if (remoteParent) {
+        setBackendParentId(remoteParent.id);
         setActiveParentState(prev => ({
           ...prev,
-          ...remoteParent,
-          vendors: { ...prev.vendors, ...remoteParent.vendors }
+          name: remoteParent.name ?? prev.name,
+          phone: remoteParent.phone ?? prev.phone,
+          language: remoteParent.language ?? prev.language,
+          city: remoteParent.city ?? prev.city,
+          address: remoteParent.address ?? prev.address,
+          vendors: { ...prev.vendors, ...remoteParent.vendors },
         }));
       }
     };
@@ -292,25 +307,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       message: `Updated profile context, documents, and local vendor bindings for ${parent.city}.`
     });
   };
-  // Dynamic upload document handler powered by multimodal Vision OCR (with smart offline fallback)
+  // Dynamic upload document handler. Prefers the Track B service on the
+  // backend (Gemini Vision, server-side) and falls back to the in-browser
+  // engine, then to the offline normalizer, so the demo never hard-fails.
   const uploadDocument = async (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE'; previewImageUrl?: string }): Promise<DocumentRecord> => {
     setIsOcrProcessing(true);
     let newDoc: DocumentRecord;
     const fileName = typeof file === 'string' ? file : file.name || 'prescription_document.png';
+    let usedBackendOcr = false;
+
     try {
-      const scanResult = await processPrescriptionScan(file);
-      newDoc = convertToDocumentRecord(scanResult, activeParent.id, fileName);
-    } catch (e) {
-      console.warn('Multimodal vision scan fallback:', e);
-      newDoc = parseUploadedDocument(file, activeParent);
+      // 1. Try the real backend OCR pipeline first.
+      const remote = await apiService.extractDocument(
+        file instanceof File ? file : { fileName },
+        activeParent.name
+      );
+
+      if (remote.success && remote.extractedItems && remote.extractedItems.length > 0) {
+        newDoc = {
+          id: `doc-remote-${Date.now()}`,
+          parentId: activeParent.id,
+          fileName,
+          docType: (remote.documentType as DocumentRecord['docType']) || 'PRESCRIPTION',
+          patientOrConsumerName: remote.patientOrConsumerName || activeParent.name,
+          consultDate: remote.consultDate || new Date().toISOString(),
+          vitalsOrSummary: remote.vitalsOrSummary || '',
+          issuer: remote.issuer || {
+            title: 'Unknown Issuer',
+            subtitle: '',
+            address: '',
+            regOrConsumer: '',
+          },
+          extractedItems: remote.extractedItems,
+        } as DocumentRecord;
+        usedBackendOcr = true;
+      } else {
+        throw new Error(remote.error || 'Backend OCR returned no items');
+      }
+    } catch {
+      // 2. Fall back to the in-browser engine, then the offline normalizer.
+      try {
+        const scanResult = await processPrescriptionScan(file);
+        newDoc = convertToDocumentRecord(scanResult, activeParent.id, fileName);
+      } catch (e) {
+        console.warn('Vision scan fallback:', e);
+        newDoc = parseUploadedDocument(file, activeParent);
+      }
     }
 
     setDocuments((prev) => [newDoc, ...prev.filter(d => d.id !== newDoc.id)]);
     setActiveDocument(newDoc);
     setIsOcrProcessing(false);
 
-    // Async post to backend if live
-    apiService.postDocument(newDoc).catch(() => {});
+    // Persist to Track C and remember the real document UUID for task FKs.
+    apiService.postDocument(newDoc, backendParentId)
+      .then(created => {
+        if (created?.id) {
+          setBackendDocIds(prev => ({ ...prev, [newDoc.id]: created.id }));
+        }
+      })
+      .catch(() => {});
 
     const avgConf = Math.round(
       (newDoc.extractedItems.reduce((acc, i) => acc + (i.confidenceScore || 0.95), 0) / (newDoc.extractedItems.length || 1)) * 100
@@ -319,21 +375,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addEventLog({
       agentSource: 'Track B Vision OCR Pipeline',
       eventType: 'DOCUMENT_OCR_INTAKE_PROCESSED',
-      severity: 'success',
-      details: `Parsed uploaded document "${newDoc.fileName}". Extracted ${newDoc.extractedItems.length} entities with ${avgConf}% confidence for ${activeParent.name}.`,
+      severity: newDoc.extractedItems.length > 0 ? 'success' : 'warning',
+      details: `Parsed "${newDoc.fileName}" via ${usedBackendOcr ? 'backend Gemini Vision' : 'in-browser OCR fallback'}. Extracted ${newDoc.extractedItems.length} entities at ${avgConf}% confidence for ${activeParent.name}.`,
       payload: {
         fileName: newDoc.fileName,
         patient: newDoc.patientOrConsumerName,
         docType: newDoc.docType,
         extractedCount: newDoc.extractedItems.length,
+        extractionEngine: usedBackendOcr ? 'backend_gemini_vision' : 'browser_fallback',
         issuer: newDoc.issuer.title
       }
     });
 
     addToast({
-      type: 'success',
-      title: 'Vision OCR Extraction Complete',
-      message: `Extracted ${newDoc.extractedItems.length} entities from "${newDoc.fileName}". Schedule table ready for verification.`
+      type: newDoc.extractedItems.length > 0 ? 'success' : 'warning',
+      title: newDoc.extractedItems.length > 0
+        ? 'Vision OCR Extraction Complete'
+        : 'No Entities Detected',
+      message: newDoc.extractedItems.length > 0
+        ? `Extracted ${newDoc.extractedItems.length} entities from "${newDoc.fileName}". Schedule table ready for verification.`
+        : `Nothing could be extracted from "${newDoc.fileName}". This file type may not be supported by the OCR engine.`
     });
 
     return newDoc;
@@ -402,9 +463,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const approveTask = (taskId: string) => {
+  // Only ids minted by Postgres can be driven through the real state machine.
+  // Seed/demo rows keep their local ids and stay dashboard-only.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isPersistedTask = (id: string) => UUID_RE.test(id);
+
+  const approveTask = async (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+
+    // Drive the real state machine first so we never show a success the
+    // backend refused (e.g. a task that is not in awaiting_approval).
+    let persisted = false;
+    if (isPersistedTask(taskId)) {
+      persisted = await apiService.approveTask(taskId);
+      if (!persisted) {
+        addToast({
+          type: 'error',
+          title: 'Approval Rejected by Backend',
+          message: `"${task.title}" could not be approved. The state machine refused the transition — check the audit trail in Tab 3.`,
+        });
+        addEventLog({
+          agentSource: 'Postgres State Planner',
+          eventType: 'TASK_APPROVAL_REJECTED',
+          severity: 'critical',
+          details: `Backend refused approval for "${task.title}". State machine guardrail blocked the transition.`,
+          payload: { taskId },
+        });
+        return;
+      }
+    }
 
     playSound('approval');
 
@@ -415,9 +503,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         origin: { y: 0.6 }
       });
     } catch {}
-
-    // Asynchronously call backend /api/tasks/:id/approve (failsafe/optimistic)
-    apiService.approveTask(taskId);
 
     const isChemist = task.category === 'chemist';
     const financialGate = evaluateFinancialGuardrail(task.amount);
@@ -457,31 +542,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         amount: task.amount || 0,
         financialGateEvaluation: financialGate,
         authorizedAt: new Date().toISOString(),
-        authType: 'CHILD_DASHBOARD_SIGN_OFF'
+        authType: 'CHILD_DASHBOARD_SIGN_OFF',
+        persistedToDatabase: persisted
       }
     });
 
     addToast({
-      type: 'success',
-      title: 'Order & Payment Dispatched via WhatsApp API',
-      message: isChemist
-        ? `Chemist order for ${task.vendor || activeParent.vendors.chemist.name} has been dispatched via WhatsApp.`
-        : `"${task.title}" has been authorized and moved to Completed.`
+      type: persisted ? 'success' : 'info',
+      title: persisted
+        ? 'Approved & Recorded in Audit Log'
+        : 'Approved (Dashboard Only)',
+      message: persisted
+        ? `"${task.title}" moved to Done and the state machine recorded awaiting_approval → done in Postgres.`
+        : `"${task.title}" moved to Done locally. This demo row was never persisted, so no audit row was written.`
     });
   };
 
-  const rejectTask = (taskId: string) => {
+  const rejectTask = async (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
+
+    let persisted = false;
+    if (isPersistedTask(taskId)) {
+      persisted = await apiService.rejectTask(taskId);
+    }
+
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     playSound('ping');
 
-    // Asynchronously call backend /api/tasks/:id/reject (failsafe)
-    apiService.rejectTask(taskId);
-    
     addToast({
       type: 'info',
       title: 'Task Dismissed',
-      message: `"${task?.title || 'Task'}" was removed from the approval queue.`
+      message: `"${task?.title || 'Task'}" was removed from the approval queue${persisted ? ' and marked couldn\'t_complete in Postgres.' : '.'}`
     });
 
     addEventLog({
@@ -527,7 +618,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const approvePrescriptionSchedule = () => {
+  const approvePrescriptionSchedule = async () => {
     playSound('approval');
     try {
       confetti({
@@ -537,6 +628,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     } catch {}
 
+    setPrescriptionItems(prev => prev.map(p => ({ ...p, status: 'active' })));
+
     // Task 2.5: reconcile what the OCR engine read against what the child confirmed.
     const corrections = prescriptionItems
       .map(item => ({
@@ -545,21 +638,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }))
       .filter(entry => entry.diff.length > 0);
 
-    const dosageCorrections = corrections.filter(entry => isDosageCorrection(entry.diff));    // Add prescription medicines as confirmed schedule tasks
+    const dosageCorrections = corrections.filter(entry => isDosageCorrection(entry.diff));
+
+    // Phase 2 Integration (Tasks 2.2i & 2.6i): Persist schedule tasks to
+    // Track C. Each task is created as `awaiting_approval` so it lands in the
+    // child's approval queue in a legally reachable state — `pending` cannot
+    // be approved, since the state machine only allows awaiting_approval -> done.
+    // The returned UUID becomes the dashboard task id, so a later
+    // approve/reject hits the real row instead of a local-only id.
+    const docUuid = backendDocIds[activeDocument.id];
+    // Quantity is not a field the OCR extracts, so derive a refill duration from
+    // the prescription item. The backend Action-Taker substitutes this into the
+    // {{2}} placeholder of the approved `order_confirmation` WhatsApp template.
+    const REFILL_DAYS: Record<string, number> = { OD: 30, BD: 30, TDS: 30, HS: 30, SOS: 7 };
+    const created = await Promise.all(
+      prescriptionItems.map(item =>
+        apiService.createTask({
+          parent_id: backendParentId,
+          task_type: toTaskType('chemist'),
+          title: `${item.medicineName} (${item.dosage})`,
+          description: `${item.frequency} — ${item.instruction}`,
+          confidence_score: item.confidence,
+          source_document_id: docUuid,
+          status: 'awaiting_approval',
+          // Consumed by backend/src/actionTaker.js when it builds the outbound
+          // template message to the chemist.
+          payload: {
+            medicine_name: `${item.medicineName} ${item.dosage}`.trim(),
+            quantity: `${REFILL_DAYS[item.frequencyCode] ?? 30} day supply`,
+            delivery_address: [activeParent.address, activeParent.city, activeParent.pincode]
+              .filter(Boolean)
+              .join(', '),
+            dosage: item.dosage,
+            frequency: item.frequency,
+            instructions: item.instruction,
+          },
+        })
+      )
+    );
+
+    const persisted = created.filter(Boolean);
+    const offline = persisted.length === 0;
+
+    // Rebuild the board rows now that we know the real ids.
     const newTasks: KanbanTask[] = prescriptionItems.map((item, index) => ({
-      id: 'rx-task-' + item.id,
+      id: persisted[index]?.id || 'rx-task-' + item.id,
       title: `${item.medicineName} (${item.dosage})`,
       subtitle: `${item.frequency} — ${item.instruction}`,
       column: index === 0 ? 'done' : 'needs_approval',
-      category: 'medication',
+      category: 'chemist',
       time: item.nextTriggerTime.split(' ')[0] || '08:00 AM',
       date: 'Daily Schedule',
       verificationMethod: index === 0 ? 'Verified via Voice Call' : 'Schedule Active (Pending Next Slot)',
       badgeText: index === 0 ? 'Verified' : 'Schedule Queued',
+      // Reflect reality: only items the child actually reviewed count as verified.
       guardrailStatus: {
-        dosageVerified: true,
+        dosageVerified: item.status === 'active' || item.status === 'verified',
         financialChecked: true,
-        emergencyScreened: true
+        emergencyScreened: true,
       },
       transcript: index === 0 ? tasks[0]?.transcript : undefined
     }));
@@ -570,27 +706,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [...filteredNew, ...prev];
     });
 
-    setPrescriptionItems(prev => prev.map(p => ({ ...p, status: 'active' })));
-
-    // Phase 2 Integration (Tasks 2.2i & 2.6i): Persist schedule tasks to Track C backend
-    prescriptionItems.forEach(item => {
-      apiService.createTask({
-        parent_id: activeParent.id,
-        task_type: 'medication',
-        title: `${item.medicineName} (${item.dosage})`,
-        description: `${item.frequency} — ${item.instruction}`,
-        confidence_score: item.confidence,
-        source_document_id: activeDocument.id
-      }).catch(() => {});
-    });
-
     addEventLog({
       agentSource: 'Guardrail Engine',
       eventType: 'PRESCRIPTION_SCHEDULE_ACTIVATED',
-      severity: 'success',
-      details: `Child verified and activated ${prescriptionItems.length} items extracted from ${activeDocument.issuer.title} (${activeDocument.fileName}). IVR schedule synced for ${activeParent.name}. ${corrections.length} child correction(s) recorded against OCR output.`,
+      severity: offline ? 'warning' : 'success',
+      details: `${offline
+        ? `Child verified and activated ${prescriptionItems.length} items from ${activeDocument.issuer.title} (${activeDocument.fileName}). Backend unreachable — schedule is local only and was NOT persisted.`
+        : `Child verified and activated ${prescriptionItems.length} items extracted from ${activeDocument.issuer.title} (${activeDocument.fileName}). Persisted ${persisted.length}/${prescriptionItems.length} to Postgres as awaiting_approval.`} ${corrections.length} child correction(s) recorded against OCR output.`,
       payload: {
         totalMedicines: prescriptionItems.length,
+        persistedCount: persisted.length,
+        persistedToDatabase: !offline,
         doctor: activeDocument.issuer.title,
         patient: activeParent.name,
         approvedBy: 'Child Dashboard',
@@ -622,11 +748,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     addToast({
-      type: 'success',
-      title: 'Schedule Activated!',
-      message: corrections.length > 0
-        ? `${prescriptionItems.length} entities verified with ${corrections.length} correction(s) logged. IVR reminders are active for ${activeParent.name.split(' ')[0]}.`
-        : `${prescriptionItems.length} entities verified. IVR call agent & reminders are active for ${activeParent.name.split(' ')[0]}.`
+      type: offline ? 'warning' : 'success',
+      title: offline ? 'Schedule Activated (Local Only)' : 'Schedule Activated!',
+      message: `${prescriptionItems.length} entities verified${offline ? ', but the backend was unreachable so nothing was saved' : ' and written to Postgres'}. ${corrections.length} correction(s) logged. IVR call agent & reminders are active for ${activeParent.name.split(' ')[0]}.`,
     });
 
     setActiveTab('command_board');

@@ -7,7 +7,6 @@
  */
 
 import type { ParentProfile, KanbanTask, EventLogItem, DocumentRecord, ExtractedItem } from '../data/mockData';
-import { INITIAL_PARENTS } from '../data/mockData';
 
 const API_BASE = '/api';
 
@@ -47,6 +46,61 @@ export function getBackendStatus() {
   return _lastBackendStatus;
 }
 
+// ────────────────────────────────────────────────────────────────
+// Vocabulary bridges between the dashboard and the Postgres schema.
+// The DB constrains tasks.task_type to a fixed enum and drives
+// tasks.status from the state machine, so neither can be passed
+// through raw from the UI.
+// ────────────────────────────────────────────────────────────────
+
+/** Frontend KanbanTask.category -> tasks.task_type (CHECK constraint) */
+const CATEGORY_TO_TASK_TYPE: Record<string, string> = {
+  chemist: 'medicine_order',
+  medication: 'medicine_order',
+  utility: 'utility_payment',
+  checkin: 'checkin',
+  grocery: 'medicine_order',
+};
+
+/** tasks.task_type -> KanbanTask.category (reverse mapping for reads) */
+const TASK_TYPE_TO_CATEGORY: Record<string, KanbanTask['category']> = {
+  medicine_order: 'chemist',
+  gas_booking: 'utility',
+  utility_payment: 'utility',
+  checkin: 'checkin',
+};
+
+export function toTaskType(category: string): string {
+  return CATEGORY_TO_TASK_TYPE[category] || 'checkin';
+}
+
+/**
+ * The board only has three columns, so anything still outstanding
+ * (pending / awaiting_call / awaiting_approval) lands in the action
+ * column. Only terminal states get their own column.
+ */
+export function toColumn(status: string): KanbanTask['column'] {
+  if (status === 'done') return 'done';
+  if (status === 'couldnt_complete') return 'blocked';
+  return 'needs_approval';
+}
+
+/** Backend action_log rows -> EventLogItem for the Tab 3 trace view */
+const ACTOR_TO_AGENT_SOURCE: Record<string, EventLogItem['agentSource']> = {
+  planner: 'Postgres State Planner',
+  voice_agent: 'Sarvam Caller Agent',
+  action_taker: 'WhatsApp/UPI Action Agent',
+  guardrail: 'Guardrail Engine',
+  system: 'Track B Vision OCR Pipeline',
+};
+
+const RESULT_TO_SEVERITY: Record<string, EventLogItem['severity']> = {
+  success: 'success',
+  blocked: 'critical',
+  failed: 'warning',
+  failed_no_answer: 'warning',
+};
+
 const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 4000): Promise<Response> => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -77,14 +131,42 @@ export const apiService = {
 
   /**
    * GET /api/parent/active
-   * Returns active parent profile with vendors (silent fallback)
+   * Returns active parent profile with vendors (silent fallback).
+   * Note: the backend `id` is a real UUID — callers must use it for
+   * foreign keys rather than the dashboard's local parent id.
    */
-  async getActiveParent(): Promise<ParentProfile | null> {
+  async getActiveParent(): Promise<(Partial<ParentProfile> & { id: string }) | null> {
     try {
-      // Return local seed data directly for guaranteed zero-console-error offline operation
-      return INITIAL_PARENTS[0];
+      const res = await fetchWithTimeout(`${API_BASE}/parent/active`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || !data.id) return null;
+      return {
+        id: String(data.id),
+        name: data.name,
+        phone: data.phone,
+        language: data.language,
+        city: data.city,
+        address: data.address,
+        vendors: data.vendors,
+      };
     } catch {
       return null;
+    }
+  },
+
+  /**
+   * GET /api/parents — every registered parent, used to resolve
+   * local dashboard profiles to their real database UUIDs.
+   */
+  async getParents(): Promise<Array<{ id: string; name: string; phone: string; city: string }>> {
+    try {
+      const res = await fetchWithTimeout(`${API_BASE}/parents`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return Array.isArray(data.parents) ? data.parents : [];
+    } catch {
+      return [];
     }
   },
 
@@ -103,25 +185,26 @@ export const apiService = {
       const res = await fetchWithTimeout(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (data && Array.isArray(data.tasks) && data.tasks.length > 0) {
-        // Map backend tasks to frontend KanbanTask schema
-        return data.tasks.map((t: any): KanbanTask => ({
-          id: t.id ? String(t.id) : `task-${Math.random()}`,
-          title: t.title || 'Medication / Utility Task',
-          subtitle: t.description || undefined,
-          column: t.status === 'done' ? 'done' : t.status === 'couldnt_complete' ? 'blocked' : 'needs_approval',
-          category: t.task_type || 'medication',
-          time: t.due_date ? new Date(t.due_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Due Today',
-          date: 'Scheduled',
-          amount: t.amount ? parseFloat(t.amount) : undefined,
-          guardrailStatus: {
-            dosageVerified: true,
-            financialChecked: true,
-            emergencyScreened: true
-          }
-        }));
-      }
-      return null;
+      if (!Array.isArray(data.tasks)) return null;
+
+      return data.tasks.map((t: any): KanbanTask => ({
+        id: String(t.id),
+        title: t.title || 'Medication / Utility Task',
+        subtitle: t.description || undefined,
+        column: toColumn(t.status),
+        category: TASK_TYPE_TO_CATEGORY[t.task_type] || 'checkin',
+        time: t.due_date
+          ? new Date(t.due_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : 'Due Today',
+        date: 'Scheduled',
+        amount: t.amount != null ? parseFloat(t.amount) : undefined,
+        // Reflect the real backend state instead of asserting every check passed.
+        guardrailStatus: {
+          dosageVerified: t.status === 'done',
+          financialChecked: t.status === 'done' || t.status === 'awaiting_approval',
+          emergencyScreened: true,
+        },
+      }));
     } catch {
       return null;
     }
@@ -129,35 +212,77 @@ export const apiService = {
 
   /**
    * POST /api/tasks/:id/approve
+   * Drives the real state machine (awaiting_approval -> done).
+   * Resolves false when the backend refuses, e.g. the task is not in
+   * a legally approvable state.
    */
-  async approveTask(_taskId: string, _approvedBy = 'dashboard'): Promise<boolean> {
-    return true;
+  async approveTask(taskId: string, approvedBy = 'dashboard'): Promise<boolean> {
+    try {
+      const res = await fetchWithTimeout(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved_by: approvedBy }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   /**
    * POST /api/tasks/:id/reject
    */
-  async rejectTask(_taskId: string, _reason = 'Rejected via child dashboard'): Promise<boolean> {
-    return true;
+  async rejectTask(taskId: string, reason = 'Rejected via child dashboard'): Promise<boolean> {
+    try {
+      const res = await fetchWithTimeout(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   /**
    * GET /api/logs?limit=50
    */
-  async getLogs(_limit = 50): Promise<EventLogItem[] | null> {
-    return null;
+  async getLogs(limit = 50): Promise<EventLogItem[] | null> {
+    try {
+      const res = await fetchWithTimeout(`${API_BASE}/logs?limit=${limit}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!Array.isArray(data.logs)) return null;
+
+      return data.logs.map((row: any): EventLogItem => ({
+        id: `backend-log-${row.id}`,
+        timestamp: row.timestamp,
+        agentSource: ACTOR_TO_AGENT_SOURCE[row.actor] || 'Postgres State Planner',
+        eventType: String(row.action || 'action').toUpperCase(),
+        severity: RESULT_TO_SEVERITY[row.result] || 'info',
+        details: `${row.actor} → ${row.action} (${row.result})`,
+        payload: row.payload || {},
+      }));
+    } catch {
+      return null;
+    }
   },
 
   /**
    * POST /api/documents
+   * Resolves to the created row (so callers can capture the real UUID for
+   * tasks.source_document_id), or null when offline.
    */
-  async postDocument(doc: DocumentRecord): Promise<boolean> {
+  async postDocument(doc: DocumentRecord, parentUuid?: string | null): Promise<{ id: string } | null> {
     try {
       const res = await fetchWithTimeout(`${API_BASE}/documents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          parent_id: doc.parentId,
+          // documents.parent_id is a UUID FK — the dashboard's local parent
+          // id is not, so prefer the resolved backend UUID when we have one.
+          parent_id: parentUuid || null,
           file_name: doc.fileName,
           doc_type: doc.docType,
           extracted_items: doc.extractedItems,
@@ -165,9 +290,11 @@ export const apiService = {
           issuer: doc.issuer
         })
       });
-      return res.ok;
+      if (!res.ok) return null;
+      const row = await res.json();
+      return row && row.id ? { id: String(row.id) } : null;
     } catch {
-      return false;
+      return null;
     }
   },
 
@@ -285,10 +412,12 @@ export const apiService = {
 
   /**
    * POST /api/tasks — create a new task from OCR extraction
-   * Used after child verifies a prescription schedule
+   * Used after child verifies a prescription schedule.
+   * `status` seeds the state machine; only pre-activation states are
+   * accepted by the backend (terminal states must go through approve/reject).
    */
   async createTask(task: {
-    parent_id: string;
+    parent_id?: string | null;
     task_type: string;
     title: string;
     description: string;
@@ -296,6 +425,10 @@ export const apiService = {
     amount?: number;
     confidence_score?: number;
     source_document_id?: string;
+    status?: 'pending' | 'awaiting_call' | 'awaiting_approval';
+    /** Per-task action arguments the backend Action-Taker uses to build the
+     *  outbound WhatsApp template (medicine_order needs name/quantity/address). */
+    payload?: Record<string, string>;
   }): Promise<any | null> {
     try {
       const res = await fetchWithTimeout(`${API_BASE}/tasks`, {
@@ -303,7 +436,11 @@ export const apiService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(task)
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        console.warn('[api] createTask rejected:', err.error);
+        return null;
+      }
       return await res.json();
     } catch {
       return null;
