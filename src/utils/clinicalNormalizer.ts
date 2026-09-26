@@ -17,6 +17,116 @@ export interface NormalizedFrequency {
 }
 
 /**
+ * Repairs truncated, abbreviated, or noisy OCR medicine names into full canonical clinical drug names.
+ */
+export function repairMedicineName(rawName: string): string {
+  if (!rawName) return 'Tab. Medication';
+  let cleaned = rawName.trim();
+
+  // Strip leading noise characters like 1., |., \., etc.
+  cleaned = cleaned.replace(/^[|\\\/!1\.\s\-_]+/, '').trim();
+
+  const lower = cleaned.toLowerCase();
+
+  // 1. Statins (Lipid Lowering)
+  if (
+    lower === 'statin' ||
+    lower === 'tab. statin' ||
+    lower === 'tab statin' ||
+    lower.endsWith(' statin') ||
+    lower.includes('rosuva') ||
+    lower.includes('rozavel') ||
+    lower.includes('crestor')
+  ) {
+    return 'Tab. Rosuvastatin';
+  }
+  if (
+    lower.includes('atorva') ||
+    lower.includes('storvas') ||
+    lower.includes('lipitor') ||
+    lower.includes('atorlip')
+  ) {
+    return 'Tab. Atorvastatin';
+  }
+
+  // 2. Metformin (Diabetes)
+  if (
+    lower.includes('1etfor') ||
+    lower.includes('letfor') ||
+    lower.includes('netfor') ||
+    lower.includes('metfor') ||
+    lower.includes('metfo') ||
+    lower.includes('metform') ||
+    lower.includes('glycomet') ||
+    lower.includes('glucophage')
+  ) {
+    if (lower.includes('xr') || lower.includes('er') || lower.includes('sr')) {
+      return 'Tab. Metformin XR';
+    }
+    return 'Tab. Metformin HCl';
+  }
+
+  // 3. Amlodipine (Cardio)
+  if (lower.includes('amlo') || lower.includes('stamlo') || lower.includes('amlong')) {
+    return 'Tab. Amlodipine';
+  }
+
+  // 4. Telmisartan (Cardio)
+  if (lower.includes('telmi') || lower.includes('telma') || lower.includes('telmikind')) {
+    return 'Tab. Telmisartan';
+  }
+
+  // 5. Glimepiride (Diabetes)
+  if (lower.includes('glime') || lower.includes('glimy') || lower.includes('amaryl')) {
+    return 'Tab. Glimepiride';
+  }
+
+  // 6. Pantoprazole / Rabeprazole (Gastro)
+  if (lower.includes('pantop') || lower.includes('pan 40') || lower.includes('pan40') || lower.includes('pantocid')) {
+    return 'Tab. Pantoprazole';
+  }
+  if (lower.includes('rabe') || lower.includes('razo')) {
+    return 'Tab. Rabeprazole';
+  }
+
+  // 7. Thyroid
+  if (lower.includes('thyro') || lower.includes('eltrox') || lower.includes('levothyro')) {
+    return 'Tab. Thyronorm';
+  }
+
+  // 8. Analgesics / Antipyretics
+  if (lower.includes('dolo') || lower.includes('calpol') || lower.includes('crocin') || lower.includes('paracet') || lower === 'pcm') {
+    return 'Tab. Paracetamol';
+  }
+  if (lower.includes('etori') || lower.includes('nucoxia') || lower.includes('etoshine')) {
+    return 'Tab. Etoricoxib';
+  }
+
+  // 9. Supplements
+  if (lower.includes('shellcal') || lower.includes('cipcal')) {
+    return 'Tab. Shellcal (Calcium + D3)';
+  }
+  if (lower.includes('calcirol') || lower.includes('cholecalciferol')) {
+    return 'Sachet Calcirol (D3)';
+  }
+
+  // Format with Tab. if missing
+  if (
+    !cleaned.toLowerCase().startsWith('tab.') &&
+    !cleaned.toLowerCase().startsWith('cap.') &&
+    !cleaned.toLowerCase().startsWith('syr.') &&
+    !cleaned.toLowerCase().startsWith('sachet') &&
+    !cleaned.toLowerCase().startsWith('energy') &&
+    !cleaned.toLowerCase().startsWith('life certificate') &&
+    !cleaned.toLowerCase().startsWith('aadhaar')
+  ) {
+    return `Tab. ${cleaned}`;
+  }
+
+  return cleaned;
+}
+
+/**
  * Normalizes all medical frequency notations into standardized clinical cadences and scheduled slots.
  */
 export function normalizeFrequency(rawInput: string): NormalizedFrequency {

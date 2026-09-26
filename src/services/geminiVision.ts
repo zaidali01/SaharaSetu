@@ -8,7 +8,7 @@
 
 import Tesseract from 'tesseract.js';
 import type { DocumentRecord, ExtractedItem } from '../data/mockData';
-import { normalizeFrequency } from '../utils/clinicalNormalizer';
+import { normalizeFrequency, repairMedicineName } from '../utils/clinicalNormalizer';
 
 export interface ExtractedMedicine {
   id: string;
@@ -63,9 +63,9 @@ const KNOWN_MEDICINES: {
   category: string;
 }[] = [
   { matchKeywords: ['amlodipine', 'amlong', 'amlovas', 'stamlo', 'amlo', 'amlod'], canonicalName: 'Tab. Amlodipine', defaultStrength: '5mg', category: 'Cardio' },
-  { matchKeywords: ['metformin', 'glycomet', 'glucophage', 'metfor', 'metfo'], canonicalName: 'Tab. Metformin HCl', defaultStrength: '500mg', category: 'Diabetes' },
-  { matchKeywords: ['rosuvastatin', 'rosuvas', 'crestor', 'rozavel', 'rosuva'], canonicalName: 'Tab. Rosuvastatin', defaultStrength: '10mg', category: 'Lipid' },
-  { matchKeywords: ['atorvastatin', 'atorva', 'storvas', 'lipitor', 'ator'], canonicalName: 'Tab. Atorvastatin', defaultStrength: '10mg', category: 'Lipid' },
+  { matchKeywords: ['metformin', 'glycomet', 'glucophage', 'metfor', 'metfo', '1etfor', 'letfor', 'netfor', '1etfori', '1etforı', 'letformin', 'metform', 'metformin hcl', 'metformin xr'], canonicalName: 'Tab. Metformin HCl', defaultStrength: '500mg', category: 'Diabetes' },
+  { matchKeywords: ['rosuvastatin', 'rosuvas', 'crestor', 'rozavel', 'rosuva', 'statin', 'statin 10', 'statin 20', 'statin 5'], canonicalName: 'Tab. Rosuvastatin', defaultStrength: '10mg', category: 'Lipid' },
+  { matchKeywords: ['atorvastatin', 'atorva', 'storvas', 'lipitor', 'ator', 'atorlip', 'atorfit'], canonicalName: 'Tab. Atorvastatin', defaultStrength: '10mg', category: 'Lipid' },
   { matchKeywords: ['telmisartan', 'telma', 'telmikind', 'micardis', 'telmi'], canonicalName: 'Tab. Telmisartan', defaultStrength: '40mg', category: 'Cardio' },
   { matchKeywords: ['thyronorm', 'eltroxin', 'levothyroxine', 'thyro'], canonicalName: 'Tab. Thyronorm', defaultStrength: '50mcg', category: 'Thyroid' },
   { matchKeywords: ['glimepiride', 'amaryl', 'glimy', 'glime'], canonicalName: 'Tab. Glimepiride', defaultStrength: '2mg', category: 'Diabetes' },
@@ -79,7 +79,7 @@ const KNOWN_MEDICINES: {
   { matchKeywords: ['clopidogrel', 'deplatt', 'clopivas', 'clopi'], canonicalName: 'Tab. Clopidogrel', defaultStrength: '75mg', category: 'Cardio' },
   { matchKeywords: ['vildagliptin', 'galvus', 'jalra', 'vilda'], canonicalName: 'Tab. Vildagliptin', defaultStrength: '50mg', category: 'Diabetes' },
   { matchKeywords: ['dapagliflozin', 'forxiga', 'oxra', 'dapa'], canonicalName: 'Tab. Dapagliflozin', defaultStrength: '10mg', category: 'Diabetes' },
-  { matchKeywords: ['paracetamol', 'dolo', 'calpol', 'crocin', 'para'], canonicalName: 'Tab. Paracetamol', defaultStrength: '650mg', category: 'General' },
+  { matchKeywords: ['paracetamol', 'dolo', 'calpol', 'crocin', 'para', 'pcm'], canonicalName: 'Tab. Paracetamol', defaultStrength: '650mg', category: 'General' },
   { matchKeywords: ['cilnidipine', 'cilacar', 'cilni'], canonicalName: 'Tab. Cilnidipine', defaultStrength: '10mg', category: 'Cardio' }
 ];
 
@@ -417,9 +417,11 @@ export function parseRawOcrTextToDoc(
         cleanName = cleanName.replace(/\s+\d+$/, '').trim();
 
         if (category !== 'Utility') {
-          if (!cleanName.toLowerCase().startsWith('tab.') && !cleanName.toLowerCase().startsWith('cap.') && !cleanName.toLowerCase().startsWith('syr.')) {
-            cleanName = `Tab. ${cleanName}`;
-          }
+          cleanName = repairMedicineName(cleanName);
+        }
+      } else {
+        if (category !== 'Utility') {
+          cleanName = repairMedicineName(cleanName);
         }
       }
 
@@ -432,7 +434,7 @@ export function parseRawOcrTextToDoc(
 
         customMedicines.push({
           id: `med_${customMedicines.length + 1}`,
-          name: cleanName,
+          name: repairMedicineName(cleanName),
           strength,
           category,
           cadence: freq.frequency,

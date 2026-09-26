@@ -403,7 +403,22 @@ export const Tab2DocumentIntake: React.FC = () => {
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-light)', background: 'var(--surface-secondary)' }}>
                     {['Medicine & Strength', 'Category', 'Cadence', 'Trigger Slot', 'Confidence', 'Extraction Diff', 'Action'].map(h => (
-                      <th key={h} style={{ padding: '12px 14px', textAlign: h === 'Action' ? 'center' : 'left', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                      <th 
+                        key={h} 
+                        style={{ 
+                          padding: '12px 14px', 
+                          textAlign: h === 'Action' ? 'center' : 'left', 
+                          fontSize: 10, 
+                          fontFamily: 'var(--font-mono)', 
+                          fontWeight: 700, 
+                          color: 'var(--text-muted)', 
+                          textTransform: 'uppercase', 
+                          letterSpacing: '0.06em',
+                          minWidth: h === 'Medicine & Strength' ? 240 : undefined
+                        }}
+                      >
+                        {h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -424,15 +439,15 @@ export const Tab2DocumentIntake: React.FC = () => {
                           cursor: 'pointer', transition: 'background 0.15s'
                         }}
                       >
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '12px 14px', minWidth: 240 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ width: 24, height: 24, borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</span>
-                            <div>
+                            <div style={{ flex: 1, minWidth: 180 }}>
                               <input
                                 type="text"
                                 value={item.medicineName}
                                 onChange={e => handleNameChange(item.id, e.target.value)}
-                                style={{ fontFamily: 'var(--font-body)', fontWeight: 600, color: 'var(--text-ink)', fontSize: 14, background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
+                                style={{ fontFamily: 'var(--font-body)', fontWeight: 600, color: 'var(--text-ink)', fontSize: 14, background: 'transparent', border: 'none', outline: 'none', width: '100%', minWidth: 180 }}
                               />
                               <p className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.dosage}</p>
                             </div>

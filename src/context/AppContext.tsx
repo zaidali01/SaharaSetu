@@ -7,7 +7,8 @@ import {
   parseUploadedDocument, 
   createImmutableEventLog, 
   evaluateFinancialGuardrail,
-  normalizeFrequency 
+  normalizeFrequency,
+  repairMedicineName
 } from '../utils/clinicalNormalizer';
 import {
   buildFieldDiff,
@@ -126,7 +127,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [documents, setDocuments] = useState<DocumentRecord[]>(INITIAL_DOCUMENTS);
   const [activeDocument, setActiveDocumentState] = useState<DocumentRecord>(INITIAL_DOCUMENTS[0]);
   const [tasks, setTasks] = useState<KanbanTask[]>(INITIAL_TASKS);
-  const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>(PRESCRIPTION_OCR_ITEMS);
+  const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>(() =>
+    PRESCRIPTION_OCR_ITEMS.map(item => {
+      const fullMedicineName = repairMedicineName(item.medicineName);
+      const mapped = {
+        ...item,
+        medicineName: fullMedicineName
+      };
+      return { ...mapped, extracted: { ...mapped } as ExtractedSnapshot };
+    })
+  );
   const [agentNodes, setAgentNodes] = useState<AgentNode[]>(AGENT_PIPELINE_NODES);
   const [eventLogs, setEventLogs] = useState<EventLogItem[]>(INITIAL_EVENT_LOGS);
   const [criticalFlags, setCriticalFlags] = useState<CriticalFlag[]>(INITIAL_CRITICAL_FLAGS);
@@ -252,9 +262,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncPrescriptionItemsFromDoc = (doc: DocumentRecord) => {
     const items: PrescriptionItem[] = doc.extractedItems.map((item) => {
       const normalized = normalizeFrequency(item.frequency || item.frequencyCode || '');
+      const fullMedicineName = repairMedicineName(item.name);
       const mapped = {
         id: item.id,
-        medicineName: item.name,
+        medicineName: fullMedicineName,
         dosage: item.dosage || '10mg',
         frequency: item.frequency || normalized.frequency,
         frequencyCode: item.frequencyCode || normalized.frequencyCode,
@@ -264,7 +275,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sourceBox: item.sourceBox || { top: 36, left: 12, width: 76, height: 7 },
         status: item.status || 'verified',
         category: item.category,
-        rawOcrText: item.rawOcrText || `${item.name} ${item.dosage || ''} ${normalized.frequencyCode}`
+        rawOcrText: item.rawOcrText || `${fullMedicineName} ${item.dosage || ''} ${normalized.frequencyCode}`
       };
       // Task 2.5: freeze the machine reading so child edits can be diffed against it.
       return { ...mapped, extracted: { ...mapped } as ExtractedSnapshot };
