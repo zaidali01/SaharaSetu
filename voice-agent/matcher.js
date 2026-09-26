@@ -14,7 +14,7 @@ const NO_WORDS = ['नहीं', 'अभी मत', 'ना', 'रहने �
 // 'काम है' is an observed STT mis-transcription of 'कम है' (short vs long vowel).
 // Only matched after the gas question, so false-positive risk is low.
 const GAS_LOW_WORDS = ['खत्म हो रहा है', 'कम है', 'काम है', 'खत्म'];
-const GAS_FINE_WORDS = ['ठीक है', 'अभी ठीक है'];
+const GAS_FINE_WORDS = ['ठीक है', 'अभी ठीक है', 'बढ़िया'];
 
 // DTMF fallback maps (task 1.5) — digit pressed -> same result labels
 // used by the speech matchers, so server.js branches identically either way.

@@ -42,6 +42,10 @@ const PHRASES = [
     text: 'Theek hai, main abhi aapke bete ko bata deta hoon. Aap dhyan rakhiye.',
   },
   {
+    filename: 'dosage_refusal.wav',
+    text: 'Maaf kijiye, main doctor nahi hoon. Main dawai ki khuraak nahi badal sakta. Main aapke bete ko bata deta hoon, woh doctor se baat karenge.',
+  },
+  {
     filename: 'closing.wav',
     text: `Theek hai, main ${CHILD_NAME} ko bata dunga sab kuch. Dhyan rakhiye. Namaste.`,
   },

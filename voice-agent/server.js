@@ -15,6 +15,7 @@ const twilio = require('twilio');
 const { matchMedicineResponse, matchGasResponse } = require('./matcher');
 const { escalate } = require('./escalate');
 const { placeCall } = require('./place_call');
+const { checkDosageChange } = require('./guardrails');
 
 
 const BACKEND_OUTCOME_URL = process.env.BACKEND_OUTCOME_URL || 'http://localhost:4000/api/calls/outcome';
@@ -125,7 +126,12 @@ app.post('/handle-medicine', async (req, res) => {
   const attempt = parseInt(req.query.attempt || '1', 10);
   const speechText = req.body.SpeechResult || '';
   const digit = req.body.Digits || '';
-  const result = matchMedicineResponse(speechText, digit);
+  let result = matchMedicineResponse(speechText, digit);
+  // Guardrail 3.2t: a dosage-change request must never count as "yes".
+  // Distress still wins; a keypad press skips this check.
+  if (result !== 'distress' && !digit && checkDosageChange(speechText)) {
+    result = 'dosage_request';
+  }
 
   console.log(`MEDICINE_CHECK (attempt ${attempt}) — heard: "${speechText}" | digit: "${digit}" | matched: ${result}`);
   const session = getSession(req.body.CallSid);
@@ -140,6 +146,23 @@ app.post('/handle-medicine', async (req, res) => {
     twiml.hangup();
     return res.type('text/xml').send(twiml.toString());
   }
+
+  if (result === 'dosage_request') {
+    await escalate({ type: 'dosage_change_request', state: 'MEDICINE_CHECK', transcript: speechText });
+    playStatic(twiml, 'dosage_refusal.wav', 'Maaf kijiye, main dawai ki khuraak nahi badal sakta.');
+    const gather = twiml.gather({
+      input: 'speech dtmf',
+      numDigits: 1,
+      language: 'hi-IN',
+      speechTimeout: 'auto',
+      action: '/handle-gas?attempt=1',
+      method: 'POST',
+    });
+    playStatic(gather, 'gas_question.wav', 'Gas cylinder ka kya haal hai?');
+    twiml.redirect('/handle-gas?attempt=1');
+    return res.type('text/xml').send(twiml.toString());
+  }
+  
 
   if (result === 'unclear' && attempt < 2) {
     const gather = twiml.gather({
