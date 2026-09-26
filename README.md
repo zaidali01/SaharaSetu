@@ -30,6 +30,10 @@ We use a standard feature-branch workflow:
 
 Please create pull requests to `dev` for review before merging.
 
-### Project Structure
-- `docs/` - Documentation and shared schemas.
-- (Additional directories for frontend, backend, voice agent, and ML will be added in Phase 1).
+### Project Structure & Documentation
+- `docs/schema.json` — Shared task contract & state definitions.
+- `docs/demo_scenario.md` — Locked live stage demo scenario (Task 0.3, Person 4).
+- `src/` — Track D: React/Vite Frontend Command Dashboard.
+- `backend/` — Track C: Node/Express & PostgreSQL Backend Engine.
+- `voice-agent/` — Track A: Outbound Voice Agent & STT/TTS caller pipeline.
+

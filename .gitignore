@@ -36,3 +36,9 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Reference & Spec Documents
+problem.txt
+SaharaSetu_Product_Requirements_Document*.pdf
+SaharaSetu_Workflow*.pdf
+*.pdf
