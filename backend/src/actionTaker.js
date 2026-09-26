@@ -112,6 +112,8 @@ async function processCallOutcome(outcome) {
 // Sub-actions (will integrate with WhatsApp API in Task 3.5)
 // -------------------------------------------------------------------
 
+const { sendWhatsAppMessage } = require('./whatsapp');
+
 async function dispatchMedicineOrder(task, callId, transcript, parentResponse) {
   console.log(`[ACTION] Dispatching medicine order for task ${task.id}`);
 
@@ -119,31 +121,22 @@ async function dispatchMedicineOrder(task, callId, transcript, parentResponse) {
   const { rows } = await pool.query("SELECT * FROM vendors WHERE parent_id = $1 AND vendor_type = 'chemist' LIMIT 1", [task.parent_id]);
   const chemistPhone = rows.length > 0 ? rows[0].phone : null;
 
-  // 2.5i: Wire Action-Taker output into WhatsApp message sends
+  let waResult = null;
+  // 2.5i: Wire Action-Taker output into WhatsApp message sends using templates
   if (chemistPhone) {
     try {
-      const waToken = process.env.WHATSAPP_TOKEN;
-      const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+      // In a real flow, task.payload would contain the extracted medicine_name, quantity, and delivery_address
+      const medicineName = task.payload?.medicine_name || 'Prescription Medicines';
+      const quantity = task.payload?.quantity || '1 month supply';
+      const deliveryAddress = task.payload?.delivery_address || 'Parent Home Address';
+
+      waResult = await sendWhatsAppMessage(
+        chemistPhone,
+        'order_confirmation', // Must match approved template in Meta Dashboard
+        [medicineName, quantity.toString(), deliveryAddress]
+      );
       
-      if (waToken && phoneId) {
-        // Send real WhatsApp message if configured
-        await fetch(`https://graph.facebook.com/v17.0/${phoneId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${waToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: chemistPhone.replace('+', ''), // Strip + for WhatsApp API
-            type: 'text',
-            text: { body: `New order request from SaharaSetu for task ${task.id}. Parent confirms medicine required.` }
-          })
-        });
-        console.log(`[ACTION] WhatsApp message dispatched to chemist at ${chemistPhone}`);
-      } else {
-        console.log(`[ACTION] WhatsApp Sandbox not configured yet. MOCK sending order to ${chemistPhone}.`);
-      }
+      console.log(`[ACTION] WhatsApp template sent to chemist at ${chemistPhone}`);
     } catch (err) {
       console.error(`[ACTION] Failed to send WhatsApp message:`, err.message);
     }
@@ -154,16 +147,17 @@ async function dispatchMedicineOrder(task, callId, transcript, parentResponse) {
     callId,
     actor: 'action_taker',
     action: 'whatsapp_order_queued',
-    result: 'success',
+    result: waResult && waResult.id ? 'success' : 'failed',
     payload: {
       task_type: task.task_type,
       parent_response: parentResponse,
       chemistPhone,
-      note: 'WhatsApp integration wired (Task 2.5i)',
+      messageId: waResult?.id,
+      note: 'WhatsApp integration via Template (Task 3.5)',
     },
   });
 
-  // For now: requires child approval before sending (demo-safe)
+  // For now: requires child approval before finalizing (demo-safe)
   return { success: true, needsApproval: true, actionType: 'whatsapp_medicine_order' };
 }
 
