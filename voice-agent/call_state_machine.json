@@ -1,0 +1,99 @@
+{
+  "scenario": "medicine_refill_and_gas_booking",
+  "language": "hi-IN",
+  "version": "0.1",
+  "states": {
+    "GREETING": {
+      "prompt_hi": "Namaste! Main {child_name} ki taraf se baat kar raha hoon. Aapse do minute baat karni hai.",
+      "prompt_en": "Hi! I'm calling on behalf of {child_name}. Need two minutes of your time.",
+      "expects_response": false,
+      "next": "MEDICINE_CHECK"
+    },
+    "MEDICINE_CHECK": {
+      "prompt_hi": "Aapki BP ki dawai ab sirf {days_left} din ki bachi hai. Kya main {chemist_name} ko order bhej doon?",
+      "prompt_en": "Your BP medicine has only {days_left} days left. Should I send an order to {chemist_name}?",
+      "expects_response": true,
+      "routes": [
+        {
+          "match": ["haan", "bhej do", "theek hai", "ha", "kar do"],
+          "action": "TRIGGER_WHATSAPP_ORDER",
+          "task_status": "awaiting_approval",
+          "next": "GAS_BOOKING_CHECK"
+        },
+        {
+          "match": ["nahi", "abhi mat", "na"],
+          "action": "MARK_DEFERRED",
+          "task_status": "deferred",
+          "next": "GAS_BOOKING_CHECK"
+        },
+        {
+          "match": "unclear_or_silence",
+          "action": "REPEAT_ONCE_THEN_DTMF",
+          "dtmf_fallback": {"1": "yes", "2": "no"},
+          "next": "MEDICINE_CHECK"
+        },
+        {
+          "match": "distress_keyword_detected",
+          "action": "ESCALATE_IMMEDIATE",
+          "next": "CLOSING"
+        }
+      ]
+    },
+    "GAS_BOOKING_CHECK": {
+      "prompt_hi": "Gas cylinder ka kya haal hai? Khatam hone wala hai ya abhi theek hai?",
+      "prompt_en": "How's the gas cylinder? Running low or still fine?",
+      "expects_response": true,
+      "routes": [
+        {
+          "match": ["khatam ho raha hai", "kam hai", "khatam"],
+          "action": "TRIGGER_GAS_BOOKING",
+          "task_status": "awaiting_approval",
+          "next": "CLOSING"
+        },
+        {
+          "match": ["theek hai", "abhi theek hai"],
+          "action": "MARK_NO_ACTION_NEEDED",
+          "task_status": "done",
+          "next": "CLOSING"
+        },
+        {
+          "match": "unclear_or_silence",
+          "action": "REPEAT_ONCE_THEN_DTMF",
+          "dtmf_fallback": {"1": "running low", "2": "fine"},
+          "next": "GAS_BOOKING_CHECK"
+        },
+        {
+          "match": "distress_keyword_detected",
+          "action": "ESCALATE_IMMEDIATE",
+          "next": "CLOSING"
+        }
+      ]
+    },
+    "CLOSING": {
+      "prompt_hi": "Theek hai, main {child_name} ko bata dunga sab kuch. Dhyan rakhiye. Namaste.",
+      "prompt_en": "Okay, I'll let {child_name} know everything. Take care. Bye.",
+      "expects_response": false,
+      "next": null,
+      "on_exit": "LOG_TRANSCRIPT_AND_ACTIONS"
+    }
+  },
+  "distress_keywords": [
+    "theek nahi",
+    "tabiyat kharab",
+    "dard",
+    "bukhar",
+    "gir gaya",
+    "gir gayi",
+    "madad"
+  ],
+  "no_answer_retry": {
+    "max_attempts": 2,
+    "after_max_attempts": "ESCALATE_MISSED_CALL"
+  },
+  "guardrails": {
+    "never_change_dosage": true,
+    "never_advise_medically": true,
+    "never_pay_without_approval": true,
+    "log_every_action": true
+  }
+}
