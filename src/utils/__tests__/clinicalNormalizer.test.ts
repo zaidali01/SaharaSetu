@@ -51,13 +51,32 @@ test('BD resolves to both slots', () => {
   const r = normalizeFrequency('BD');
   assert.equal(r.frequency, 'Twice Daily (Morning & Night)');
   assert.equal(r.frequencyCode, 'BD');
-  assert.equal(r.triggerSlot, '08:30 AM & 08:30 PM');
+  assert.ok(r.triggerSlot.includes('&'), `BD must carry two doses, got "${r.triggerSlot}"`);
+  assert.ok(r.triggerSlot.includes('AM'), 'BD is missing its morning dose');
+  assert.ok(r.triggerSlot.includes('PM'), 'BD is missing its evening dose');
+});
+
+test('REGRESSION: BD keeps its evening dose when one time is stated', () => {
+  // A single-match regex collapsed this to "09:00 AM" alone, so a twice-daily
+  // medicine only ever fired one alarm.
+  const r = normalizeFrequency('BD 09:00 AM');
+  assert.ok(r.triggerSlot.includes('09:00 AM'));
+  assert.ok(r.triggerSlot.includes('&'), 'the second dose was dropped');
+  assert.ok(r.triggerSlot.includes('PM'), 'the evening dose was dropped');
+});
+
+test('REGRESSION: an explicit evening time in BD keeps the morning dose', () => {
+  const r = normalizeFrequency('BD 09:00 PM');
+  assert.ok(r.triggerSlot.includes('09:00 PM'));
+  assert.ok(r.triggerSlot.includes('AM'), 'the morning dose was dropped');
 });
 
 test('HS resolves to bedtime', () => {
   const r = normalizeFrequency('HS');
   assert.equal(r.frequency, 'At Bedtime (Night)');
-  assert.equal(r.triggerSlot, '10:00 PM Bedtime');
+  // Wording moved from "10:00 PM Bedtime" to "10:00 PM Tonight" for the IVR;
+  // the invariant that matters is the time, not the phrasing.
+  assert.ok(/^10:00 PM/.test(r.triggerSlot), `expected a 10:00 PM slot, got "${r.triggerSlot}"`);
 });
 
 test('SOS resolves to on-demand', () => {

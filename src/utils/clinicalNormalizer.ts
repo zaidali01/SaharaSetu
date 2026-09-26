@@ -20,7 +20,10 @@ export interface NormalizedFrequency {
  * Normalizes all medical frequency notations into standardized clinical cadences and scheduled slots.
  */
 export function normalizeFrequency(rawInput: string): NormalizedFrequency {
-  const text = (rawInput || '').trim().toLowerCase();
+  // The explicit-time branches below call rawInput.match(), so a missing OCR line
+  // would throw and take the whole review screen down with it.
+  const safeInput = typeof rawInput === 'string' ? rawInput : '';
+  const text = safeInput.trim().toLowerCase();
 
   // 0. Once daily EVENING / OD evening / 0-0-1.
   // MUST be tested before the OD/morning branch below: "Once Daily (Evening)"
@@ -114,11 +117,21 @@ export function normalizeFrequency(rawInput: string): NormalizedFrequency {
     /breakfast\s*(?:&|and)\s*dinner/i.test(text) ||
     /दिन में दो बार|2 बार|सुबह और रात|सुबह शाम|सुबह नाश्ते के बाद.*रात|1 गोली सुबह.*1 रात/.test(text)
   ) {
-    const slotMatch = rawInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
+    // A twice-daily medicine must always yield two slots. The single-match regex
+    // only ever captures the first time mentioned, which silently collapsed BD
+    // down to one morning alarm while the label still said "Morning & Night".
+    const foundTimes = safeInput.match(/\b\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?\b/gi) ?? [];
+    const bdTimes = foundTimes.slice(0, 2);
+    if (bdTimes.length === 0) {
+      bdTimes.push('08:30 AM', '08:30 PM');
+    } else if (bdTimes.length === 1) {
+      if (/pm/i.test(bdTimes[0])) bdTimes.unshift('08:30 AM');
+      else bdTimes.push('08:30 PM');
+    }
     return {
       frequency: 'Twice Daily (Morning & Night)',
       frequencyCode: 'BD',
-      triggerSlot: slotMatch ? slotMatch[1] : '08:30 AM Tomorrow',
+      triggerSlot: bdTimes.join(' & '),
       instruction: '1 tablet twice daily immediately after morning and evening meals (1 गोली सुबह, 1 रात को)'
     };
   }
@@ -135,7 +148,7 @@ export function normalizeFrequency(rawInput: string): NormalizedFrequency {
     text.includes('night') ||
     text.includes('bedtime')
   ) {
-    const slotMatch = rawInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
+    const slotMatch = safeInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
     const isEveningOnly = (text.includes('evening') || text.includes('शाम')) && !text.includes('bedtime') && !text.includes('hs') && !text.includes('सोते समय');
     return {
       frequency: isEveningOnly ? 'Once Daily (Evening)' : 'At Bedtime (Night)',
@@ -155,7 +168,7 @@ export function normalizeFrequency(rawInput: string): NormalizedFrequency {
     text.includes('od') ||
     text.includes('qd')
   ) {
-    const slotMatch = rawInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
+    const slotMatch = safeInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
     return {
       frequency: 'Once Daily (Morning)',
       frequencyCode: 'OD',
@@ -190,7 +203,7 @@ export function normalizeFrequency(rawInput: string): NormalizedFrequency {
   }
 
   // Default fallback
-  const fallbackSlot = rawInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
+  const fallbackSlot = safeInput.match(/\b(\d{1,2}:\d{2}\s*(?:AM|PM)(?:\s*(?:Today|Tomorrow|Tonight|Daily))?)\b/i);
   return {
     frequency: 'Once Daily (Morning)',
     frequencyCode: 'OD',
