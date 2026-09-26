@@ -1,2 +1,24 @@
-.env
+# Dependencies
 node_modules/
+
+# Secrets — never commit these
+.env
+.env.local
+.env.*.local
+
+# Runtime-generated, not source code
+voice-agent/public/audio/*.wav
+voice-agent/alerts.json
+alerts.json
+
+# Logs
+npm-debug.log*
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor folders
+.vscode/
+.idea/
