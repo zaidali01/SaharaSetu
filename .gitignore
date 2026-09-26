@@ -22,6 +22,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+*.traineddata
 
 # OS junk
 .DS_Store
@@ -36,3 +37,9 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Reference & Spec Documents
+problem.txt
+SaharaSetu_Product_Requirements_Document*.pdf
+SaharaSetu_Workflow*.pdf
+*.pdf

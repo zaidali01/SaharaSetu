@@ -44,22 +44,33 @@ async function runPlanner() {
     });
 
     if (result.success) {
-      // In real integration: call the Voice Agent (Track A) API here
-      // e.g. await triggerVoiceCall({ phone: task.parent_phone, taskId: task.id, language: task.language })
-      console.log(`[PLANNER] ✓ Task ${task.id} (${task.task_type}) → awaiting_call for ${task.parent_name}`);
+      // 2.3i: Call the Voice Agent (Track A) API
+      try {
+        const response = await fetch('http://localhost:3000/api/trigger-call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId: task.id, phone: task.parent_phone }),
+        });
+        const triggerData = await response.json();
+        
+        console.log(`[PLANNER] ✓ Task ${task.id} (${task.task_type}) → awaiting_call for ${task.parent_name}. Call SID: ${triggerData.callSid}`);
 
-      await logAction({
-        taskId: task.id,
-        actor: 'planner',
-        action: 'call_trigger_sent',
-        result: 'success',
-        payload: {
-          parent_phone: task.parent_phone,
-          language: task.language,
-          task_type: task.task_type,
-          note: 'Voice Agent integration pending (Track A)',
-        },
-      });
+        await logAction({
+          taskId: task.id,
+          actor: 'planner',
+          action: 'call_trigger_sent',
+          result: 'success',
+          payload: {
+            parent_phone: task.parent_phone,
+            language: task.language,
+            task_type: task.task_type,
+            callSid: triggerData.callSid,
+            note: 'Voice Agent triggered successfully via HTTP API',
+          },
+        });
+      } catch (err) {
+        console.error(`[PLANNER] Failed to trigger Voice Agent for Task ${task.id}:`, err.message);
+      }
     }
   }
 }

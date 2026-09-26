@@ -1,333 +1,265 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  UploadCloud, 
-  ShieldAlert, 
-  CheckCircle2, 
-  Sparkles, 
-  Clock, 
-  ArrowRight, 
-  ShieldCheck, 
-  ScanLine,
-  FileText,
-  Plus
+import {
+  UploadCloud, ShieldAlert, CheckCircle2, Sparkles, Clock, ArrowRight,
+  ShieldCheck, ScanLine, FileText, Plus
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PrescriptionCanvas } from '../prescription/PrescriptionCanvas';
 import { playSound } from '../../utils/audio';
 
 export const Tab2DocumentIntake: React.FC = () => {
-  const { 
-    prescriptionItems, 
-    setPrescriptionItems, 
-    approvePrescriptionSchedule, 
-    selectedRxId, 
-    setSelectedRxId,
-    activeParent,
-    documents,
-    activeDocument,
-    setActiveDocument,
-    uploadDocument
+  const {
+    prescriptionItems, setPrescriptionItems, approvePrescriptionSchedule,
+    selectedRxId, setSelectedRxId, activeParent, documents, activeDocument,
+    setActiveDocument, uploadDocument, isOcrProcessing, backendStatus,
   } = useApp();
 
   const [isDragging, setIsDragging] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
 
-  const handleFrequencyChange = (id: string, newFreq: string) => {
-    setPrescriptionItems(prev =>
-      prev.map(item => (item.id === id ? { ...item, frequency: newFreq } : item))
-    );
-  };
+  const handleFrequencyChange = (id: string, newFreq: string) =>
+    setPrescriptionItems(prev => prev.map(item => item.id === id ? { ...item, frequency: newFreq } : item));
 
-  const handleNameChange = (id: string, newName: string) => {
-    setPrescriptionItems(prev =>
-      prev.map(item => (item.id === id ? { ...item, medicineName: newName } : item))
-    );
-  };
+  const handleNameChange = (id: string, newName: string) =>
+    setPrescriptionItems(prev => prev.map(item => item.id === id ? { ...item, medicineName: newName } : item));
 
-  const triggerScanAnimation = (fileName: string) => {
-    setIsScanning(true);
-    setScanProgress(0);
-    playSound('ping');
-
-    let current = 0;
-    const interval = setInterval(() => {
-      current += 25;
-      setScanProgress(Math.min(100, current));
-      if (current >= 100) {
-        clearInterval(interval);
-        setTimeout(() => {
-          setIsScanning(false);
-          playSound('approval');
-          uploadDocument({ name: fileName });
-        }, 300);
-      }
-    }, 200);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      triggerScanAnimation(e.target.files[0].name);
+  const triggerScanAnimation = async (fileInput: File | string) => {
+    setIsScanning(true); setScanProgress(20); playSound('ping');
+    const t1 = setTimeout(() => setScanProgress(55), 250);
+    const t2 = setTimeout(() => setScanProgress(85), 550);
+    try {
+      if (typeof fileInput === 'string') await uploadDocument({ name: fileInput });
+      else await uploadDocument(fileInput);
+      clearTimeout(t1); clearTimeout(t2); setScanProgress(100);
+      setTimeout(() => { setIsScanning(false); playSound('approval'); }, 350);
+    } catch {
+      clearTimeout(t1); clearTimeout(t2); setScanProgress(100);
+      setTimeout(() => { setIsScanning(false); }, 350);
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) triggerScanAnimation(e.target.files[0]);
+  };
+
   return (
-    <div className="space-y-6 pb-24">
-      
-      {/* Top Header Banner */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {/* ── Page Header ── */}
+      <div className="page-header-container">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-slate-900 tracking-tight">
-              Prescription Document Intake & OCR Schedule Verification
-            </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-              Tasks 4.1 & 4.2
-            </span>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Zero-hallucination verification pipeline: AI Vision OCR extracts medicine regimens for <strong>{activeParent.name}</strong>, requiring child validation before autonomous activation.
+          <p className="page-breadcrumb">Operations / Document Intake</p>
+          <h1 className="page-title">Prescription OCR & Verification</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+            Zero-hallucination pipeline for <strong>{activeParent.name}</strong> · Verification required
           </p>
         </div>
-
-        {/* Safety Indicator Badge */}
-        <div className="flex items-center gap-2 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200 text-emerald-800 text-xs font-semibold shrink-0">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>Anti-Hallucination Safe Review</span>
+        <div className="page-actions">
+          <span className="status-chip active">
+            <ScanLine size={13} />
+            OCR {backendStatus === 'connected' ? 'Live' : 'Fallback'}
+          </span>
+          <span className="status-chip">
+            <ShieldCheck size={13} />
+            Anti-Hallucination Gate
+          </span>
         </div>
       </div>
 
-      {/* Dynamic Document Pill Switcher */}
-      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider pl-1">
-            Active Grounded Docs:
-          </span>
-          {documents.map((doc) => {
+      {/* ── Document switcher ── */}
+      <div className="card" style={{ padding: '10px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto' }}>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Active Docs:</span>
+          {documents.map(doc => {
             const isActive = activeDocument.id === doc.id;
             return (
               <button
                 key={doc.id}
                 onClick={() => setActiveDocument(doc)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
-                  isActive
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                }`}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 13,
+                  fontWeight: isActive ? 600 : 500,
+                  cursor: 'pointer',
+                  border: isActive ? '1px solid var(--terracotta)' : '1px solid var(--border-light)',
+                  background: isActive ? 'var(--soft-accent-tint)' : 'var(--surface-secondary)',
+                  color: isActive ? 'var(--terracotta)' : 'var(--text-muted)',
+                  display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, transition: 'all 0.15s'
+                }}
               >
-                <FileText className="w-3.5 h-3.5" />
-                <span>{doc.fileName}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                  isActive ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-600'
-                }`}>
+                <FileText size={14} />
+                {doc.fileName}
+                <span className="mono" style={{ fontSize: 10, opacity: 0.7 }}>
                   {doc.docType === 'PRESCRIPTION' ? 'Rx' : 'Bill'}
                 </span>
               </button>
             );
           })}
         </div>
-
-        <button
-          onClick={() => triggerScanAnimation(`rx_dr_jha_patna_${Date.now().toString().slice(-4)}.pdf`)}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 flex items-center gap-1 transition-all cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Simulate Upload</span>
+        <button onClick={() => triggerScanAnimation(`rx_dr_jha_${Date.now().toString().slice(-4)}.pdf`)} className="btn btn-outline" style={{ fontSize: 13 }}>
+          <Plus size={14} /> Simulate Upload
         </button>
       </div>
 
-      {/* Split-Screen Layout: Left Side (Task 4.1) & Right Side (Task 4.2) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* =========================================================================
-            LEFT SIDE: TASK 4.1 DOCUMENT INTAKE & PRESCRIPTION CANVAS (5 Cols)
-        ========================================================================= */}
-        <div className="lg:col-span-5 space-y-4">
-          
-          {/* Drag & Drop Upload Zone */}
+      {/* ── Two-column layout ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 20, alignItems: 'start' }}>
+
+        {/* LEFT: Upload + Canvas */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Drop zone */}
           <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setIsDragging(false);
-              triggerScanAnimation('dr_verma_prescription_pmch.pdf');
+            onDrop={e => {
+              e.preventDefault(); setIsDragging(false);
+              if (e.dataTransfer.files?.[0]) triggerScanAnimation(e.dataTransfer.files[0]);
+              else triggerScanAnimation('dr_verma_prescription_pmch.pdf');
             }}
-            className={`p-5 rounded-2xl border-2 border-dashed transition-all text-center cursor-pointer ${
-              isDragging
-                ? 'border-teal-500 bg-teal-50/80 scale-[0.99]'
-                : 'border-slate-300 hover:border-teal-500 bg-white'
-            }`}
+            className="card"
+            style={{
+              padding: '32px 24px',
+              border: `1px dashed ${isDragging ? 'var(--terracotta)' : 'var(--border-light)'}`,
+              background: isDragging ? 'var(--soft-accent-tint)' : 'var(--surface-secondary)',
+              textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s'
+            }}
           >
-            <label className="cursor-pointer block">
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-              <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto mb-2 shadow-2xs">
-                <UploadCloud className="w-5 h-5" />
+            <label style={{ cursor: 'pointer', display: 'block' }}>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={handleFileUpload} />
+              <div style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)', background: '#fff', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <UploadCloud size={24} color="var(--terracotta)" />
               </div>
-              <h4 className="text-xs font-semibold text-slate-800">
-                Drop New Prescription or Lab Scan Here
+              <h4 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-ink)', marginBottom: 4 }}>
+                Drop Prescription or Scan
               </h4>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Supports PDF, PNG, JPG scans ({activeDocument.issuer.title} loaded)
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                PDF, PNG, JPG · {activeDocument.issuer.title}
               </p>
             </label>
           </div>
 
-          {/* Scanning Progress Overlay / Skeleton if active */}
+          {/* Scan progress */}
           <AnimatePresence>
-            {isScanning && (
+            {(isScanning || isOcrProcessing) && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 space-y-2.5 overflow-hidden"
+                className="card"
+                style={{ padding: 16, overflow: 'hidden', background: 'var(--ink)', color: 'var(--bg-page)' }}
               >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-2 font-mono text-teal-300">
-                    <ScanLine className="w-4 h-4 animate-pulse text-teal-400" />
-                    AI Vision OCR running...
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--bg-page)' }}>
+                    <ScanLine size={14} /> Vision OCR running...
                   </span>
-                  <span className="font-mono text-xs text-teal-400 font-bold">{scanProgress}%</span>
+                  <span className="mono" style={{ color: 'var(--terracotta)', fontWeight: 700 }}>{scanProgress}%</span>
                 </div>
-                <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                  <motion.div
-                    className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full"
-                    style={{ width: `${scanProgress}%` }}
-                  />
+                <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: 'var(--terracotta)', width: `${scanProgress}%`, transition: 'width 0.3s ease' }} />
                 </div>
-                <p className="text-[10px] text-slate-400 font-mono">
-                  Detecting bounding boxes & matching clinical NDC registry tokens...
-                </p>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Visual Realistic Doctor Prescription / Document Canvas */}
           <PrescriptionCanvas />
         </div>
 
+        {/* RIGHT: Verification table */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        {/* =========================================================================
-            RIGHT SIDE: TASK 4.2 PRE-ACTIVATION SCHEDULE VERIFICATION (7 Cols)
-        ========================================================================= */}
-        <div className="lg:col-span-7 space-y-4">
-          
-          {/* Prominent Mandatory Safety Gate Callout */}
-          <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 shadow-xs flex items-start gap-3 text-amber-950">
-            <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <h4 className="text-xs font-bold tracking-tight uppercase">
-                Safety Guardrail: Child Confirmation Required
+          {/* Safety gate callout */}
+          <div className="card" style={{ padding: 16, display: 'flex', gap: 12, background: 'var(--review-soft)', borderColor: 'var(--mustard)' }}>
+            <ShieldAlert size={20} color="var(--review-text)" style={{ flexShrink: 0 }} />
+            <div>
+              <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--review-text)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                Guardrail: Manual Confirmation Required
               </h4>
-              <p className="text-xs text-amber-900 leading-relaxed">
-                Scheduled calls and vendor orders remain locked until verified by the child. No automated voice IVR calls or local chemist purchase dispatches occur until this schedule is confirmed.
+              <p style={{ fontSize: 14, color: 'var(--review-text)', opacity: 0.9 }}>
+                No automated voice calls or chemist dispatches occur until this schedule is confirmed.
               </p>
             </div>
           </div>
 
-          {/* Schedule Verification Table Card with tight px-3 py-2 padding for zero clipping */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          {/* Verification table */}
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">
-                  Pre-Activation Schedule Verification Table
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-ink)', marginBottom: 2 }}>
+                  Pre-Activation Schedule Verification
                 </h3>
-                <p className="text-xs text-slate-500">
-                  Anti-hallucination safe review before syncing to IVR caller agent
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  Anti-hallucination safe review before syncing to IVR
                 </p>
               </div>
-              <span className="text-xs font-semibold text-teal-800 bg-teal-100 px-2.5 py-0.5 rounded-full">
-                {prescriptionItems.length} Items Extracted
-              </span>
+              <span className="badge badge-success">{prescriptionItems.length} Items</span>
             </div>
 
-            {/* Table wrapper with overflow-x-auto and tight cell padding */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
-                  <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="px-3 py-2.5">Medicine & Strength</th>
-                    <th className="px-3 py-2.5">Category</th>
-                    <th className="px-3 py-2.5">Cadence</th>
-                    <th className="px-3 py-2.5">Next Refill Date</th>
-                    <th className="px-3 py-2.5 text-right">Confidence</th>
+                  <tr style={{ borderBottom: '1px solid var(--border-light)', background: 'var(--surface-secondary)' }}>
+                    {['Medicine & Strength', 'Category', 'Cadence', 'Next Refill', 'Confidence'].map(h => (
+                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody>
                   {prescriptionItems.map((item, idx) => {
                     const isSelected = selectedRxId === item.id;
-                    const isHighConfidence = item.confidence >= 0.95;
-
+                    const isHigh = item.confidence >= 0.95;
                     return (
                       <tr
                         key={item.id}
                         onClick={() => setSelectedRxId(item.id)}
-                        className={`transition-colors cursor-pointer ${
-                          isSelected ? 'bg-teal-50/70 font-medium' : 'hover:bg-slate-50'
-                        }`}
+                        style={{
+                          borderBottom: '1px solid var(--border-light)',
+                          background: isSelected ? 'var(--success-soft)' : '#fff',
+                          cursor: 'pointer', transition: 'background 0.15s'
+                        }}
                       >
-                        {/* Medicine Name & Dosage */}
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="w-4 h-4 rounded bg-slate-200 text-slate-700 flex items-center justify-center font-mono text-[9px] font-bold shrink-0">
-                              {idx + 1}
-                            </span>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ width: 24, height: 24, borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</span>
                             <div>
                               <input
                                 type="text"
                                 value={item.medicineName}
-                                onChange={(e) => handleNameChange(item.id, e.target.value)}
-                                className="font-semibold text-slate-900 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none"
+                                onChange={e => handleNameChange(item.id, e.target.value)}
+                                style={{ fontFamily: 'var(--font-body)', fontWeight: 600, color: 'var(--text-ink)', fontSize: 14, background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
                               />
-                              <p className="text-[10px] text-slate-500 font-mono">{item.dosage}</p>
+                              <p className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.dosage}</p>
                             </div>
                           </div>
                         </td>
-
-                        {/* Category Badge */}
-                        <td className="px-3 py-2">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                            {item.category}
-                          </span>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', color: 'var(--text-muted)' }}>{item.category}</span>
                         </td>
-
-                        {/* Frequency Dropdown */}
-                        <td className="px-3 py-2">
+                        <td style={{ padding: '12px 16px' }}>
                           <select
                             value={item.frequency}
-                            onChange={(e) => handleFrequencyChange(item.id, e.target.value)}
-                            className="bg-white border border-slate-300 rounded px-1.5 py-1 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            onChange={e => handleFrequencyChange(item.id, e.target.value)}
+                            style={{ fontFamily: 'var(--font-body)', background: '#fff', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: 13, color: 'var(--text-ink)', outline: 'none', cursor: 'pointer' }}
                           >
-                            <option value="Once Daily (Morning)">Once Daily (Morning)</option>
-                            <option value="Twice Daily (Morning & Night)">Twice Daily (Morning & Night)</option>
-                            <option value="At Bedtime (Night)">At Bedtime (Night)</option>
-                            <option value="As Needed (SOS)">As Needed (SOS)</option>
+                            <option value="Once Daily (Morning)">Once Daily</option>
+                            <option value="Twice Daily (Morning & Night)">Twice Daily</option>
+                            <option value="At Bedtime (Night)">At Bedtime</option>
+                            <option value="As Needed (SOS)">As Needed</option>
                           </select>
                         </td>
-
-                        {/* Next Refill Trigger Time */}
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-1 text-slate-600 font-mono text-[11px]">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            <span>{item.nextTriggerTime}</span>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 13 }}>
+                            <Clock size={14} /> {item.nextTriggerTime}
                           </div>
                         </td>
-
-                        {/* Confidence Metric */}
-                        <td className="px-3 py-2 text-right">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                            isHighConfidence
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                              : 'bg-amber-50 text-amber-800 border border-amber-200'
-                          }`}>
-                            <Sparkles className="w-2.5 h-2.5" />
-                            {(item.confidence * 100).toFixed(0)}%
+                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                          <span className={`badge ${isHigh ? 'badge-success' : 'badge-review'}`}>
+                            <Sparkles size={12} /> {(item.confidence * 100).toFixed(0)}%
                           </span>
                         </td>
                       </tr>
@@ -337,30 +269,18 @@ export const Tab2DocumentIntake: React.FC = () => {
               </table>
             </div>
 
-            {/* Verification Footer & CTA */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs text-slate-600">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>
-                  All {prescriptionItems.length} items grounded to <strong>{activeDocument.issuer.title}</strong>
-                </span>
+            <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface-secondary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
+                <CheckCircle2 size={16} color="var(--success)" />
+                All {prescriptionItems.length} items grounded to <strong>{activeDocument.issuer.title}</strong>
               </div>
-
-              <button
-                type="button"
-                onClick={approvePrescriptionSchedule}
-                className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
-              >
-                <span>Approve & Activate Schedule</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+              <button type="button" onClick={approvePrescriptionSchedule} className="btn btn-ink">
+                Approve & Activate Schedule <ArrowRight size={14} />
               </button>
             </div>
-
           </div>
-
         </div>
-
       </div>
-    </div>
+    </motion.div>
   );
 };

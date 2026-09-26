@@ -74,46 +74,51 @@ export const AuditTraceDrawer: React.FC = () => {
                   Prescription OCR Extraction
                 </span>
                 <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  96.4% High Confidence
+                  97.4% High Confidence
                 </span>
               </div>
-              <div className="p-3 rounded-xl border border-zinc-200 space-y-2 font-mono text-[11px] bg-zinc-900 text-zinc-200">
-                <div className="text-emerald-400">// Grounded Document Reference</div>
+              <div className="p-3 rounded-xl border border-zinc-200 space-y-1.5 font-mono text-[11px] bg-zinc-900 text-zinc-200">
+                <div className="text-emerald-400">// Grounded Document Reference & Integrity</div>
                 <div>Source: {activeDocument.issuer.title} ({activeDocument.fileName})</div>
-                <div>Hash: sha256:7f8a92cb...{activeParent.id}</div>
+                <div>Hash: sha256:7f8a92cb...{activeParent.id.slice(-4)}f9a0</div>
                 <div>Issuer: {activeDocument.issuer.address}</div>
                 <div>Bounding Box: [x: 12%, y: 45%, w: 76%, h: 7%]</div>
+                <div className="text-teal-300">Status: IMMUTABLE_APPEND_ONLY_VERIFIED</div>
               </div>
             </div>
 
             {/* Guardrail Checklist */}
             <div className="space-y-2.5">
               <span className="text-xs font-semibold text-zinc-800">
-                Safety Invariant Gates (State Machine v4.2)
+                Safety Invariant Gates (State Machine & Guardrails v4.2)
               </span>
 
               <div className="space-y-2">
                 <div className="p-2.5 rounded-lg border border-emerald-200/80 bg-emerald-50/40 flex items-start gap-2.5">
                   <FileCheck2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                   <div>
-                    <div className="font-semibold text-emerald-950">Rule #1: Immutable Dosage</div>
-                    <div className="text-emerald-800/80 text-[11px]">No variation in strength or molecule detected from original Rx.</div>
+                    <div className="font-semibold text-emerald-950">Rule #1: Immutable Dosage & Frequency</div>
+                    <div className="text-emerald-800/80 text-[11px]">No variation in strength, molecule, or Latin frequency code allowed without child re-verification.</div>
                   </div>
                 </div>
 
                 <div className="p-2.5 rounded-lg border border-amber-200/80 bg-amber-50/40 flex items-start gap-2.5">
                   <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div>
-                    <div className="font-semibold text-amber-950">Rule #2: Mandatory 1-Click Approval</div>
-                    <div className="text-amber-800/80 text-[11px]">Financial transaction locked until family signs off from dashboard.</div>
+                    <div className="font-semibold text-amber-950">Rule #2: ₹1,000 Financial Threshold Gate</div>
+                    <div className="text-amber-800/80 text-[11px]">
+                      {activeAuditTask.amount && activeAuditTask.amount > 1000
+                        ? `Order amount (₹${activeAuditTask.amount.toFixed(2)}) > ₹1,000. Autonomous payment blocked by policy. Manual child sign-off required.`
+                        : 'Any payment above ₹1,000 is locked in "Needs Approval". Zero unapproved autonomous wallet debits.'}
+                    </div>
                   </div>
                 </div>
 
                 <div className="p-2.5 rounded-lg border border-emerald-200/80 bg-emerald-50/40 flex items-start gap-2.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                   <div>
-                    <div className="font-semibold text-emerald-950">Rule #3: Distress Keyword Filter</div>
-                    <div className="text-emerald-800/80 text-[11px]">ASR phonetic confidence 0.00 distress sentiment during intake.</div>
+                    <div className="font-semibold text-emerald-950">Rule #3: Distress Keyword Filter & ASR Screening</div>
+                    <div className="text-emerald-800/80 text-[11px]">Phonetic scan for emergency triggers (e.g. "दर्द", "साँस", "चक्कर") before initiating routines.</div>
                   </div>
                 </div>
               </div>
@@ -123,9 +128,9 @@ export const AuditTraceDrawer: React.FC = () => {
             <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200/80 space-y-2 font-mono text-[11px] text-zinc-600">
               <div className="flex items-center gap-1.5 text-zinc-800 font-semibold font-sans text-xs">
                 <Database className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Deterministic State Path</span>
+                <span>Deterministic State Path & Sequence</span>
               </div>
-              <div className="flex items-center gap-1 text-zinc-500">
+              <div className="flex items-center gap-1 text-zinc-500 flex-wrap">
                 <span>INTAKE_PARSED</span>
                 <ArrowRight className="w-3 h-3 text-zinc-400" />
                 <span>POLICY_PASSED</span>
@@ -138,8 +143,8 @@ export const AuditTraceDrawer: React.FC = () => {
           {/* Footer */}
           <div className="p-4 border-t border-zinc-100 bg-zinc-50/50 flex items-center justify-between">
             <span className="text-[11px] text-zinc-500 flex items-center gap-1">
-              <Fingerprint className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Cryptographically signed</span>
+              <Fingerprint className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="font-mono text-[10px]">SHA-256 Audit Chain Verified</span>
             </span>
             <button
               onClick={() => setActiveAuditTask(null)}

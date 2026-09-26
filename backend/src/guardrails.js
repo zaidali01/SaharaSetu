@@ -14,7 +14,10 @@ const MAX_PAYMENT_AMOUNT = parseFloat(process.env.MAX_PAYMENT_AMOUNT || '500');
 function checkDosageChangeGuardrail(transcript = '') {
   const dosagePatterns = [
     /dose.*change/i,
+    /dosage.*change/i,
+    /dose.*increase/i,
     /dosage.*increase/i,
+    /dose.*decrease/i,
     /dosage.*decrease/i,
     /tablet.*badha/i,       // Hindi: tablet increase
     /dawa.*kam karo/i,      // Hindi: reduce medicine

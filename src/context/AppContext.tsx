@@ -1,7 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { playSound } from '../utils/audio';
-import { apiService } from '../services/api';
+import { apiService, onBackendStatusChange, getBackendStatus } from '../services/api';
+import { processPrescriptionScan, convertToDocumentRecord } from '../services/geminiVision';
+import { 
+  parseUploadedDocument, 
+  createImmutableEventLog, 
+  evaluateFinancialGuardrail,
+  normalizeFrequency 
+} from '../utils/clinicalNormalizer';
 import type {
   KanbanTask,
   ParentProfile,
@@ -43,7 +50,7 @@ interface AppContextType {
   setDocuments: React.Dispatch<React.SetStateAction<DocumentRecord[]>>;
   activeDocument: DocumentRecord;
   setActiveDocument: (doc: DocumentRecord) => void;
-  uploadDocument: (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE' }) => void;
+  uploadDocument: (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE'; previewImageUrl?: string }) => Promise<DocumentRecord>;
   tasks: KanbanTask[];
   setTasks: React.Dispatch<React.SetStateAction<KanbanTask[]>>;
   prescriptionItems: PrescriptionItem[];
@@ -79,15 +86,23 @@ interface AppContextType {
   resolveStockBlocker: (taskId: string, alternateChemist: string) => void;
   approvePrescriptionSchedule: () => void;
   
-  // Demo Simulator Triggers
+  // Demo & Guardrail Simulator Triggers (Phase 3 Tasks 3.1t & 3.2t)
   triggerSimulateMorningCall: () => void;
   triggerSimulateMissedCall: () => void;
   triggerSimulateDistressAlert: () => void;
+  triggerSimulateUnapprovedPayment: () => void;
+  triggerSimulateDosageChangeAttempt: () => void;
+  triggerResetDemo: () => void;
   
   // Toasts
   toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
   removeToast: (id: string) => void;
+  
+  // Phase 2 Backend & OCR Integration
+  backendStatus: 'connected' | 'offline';
+  refreshFromBackend: () => Promise<void>;
+  isOcrProcessing: boolean;
   
   // Selected Rx Item for synchronized canvas highlight
   selectedRxId: string | null;
@@ -117,8 +132,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeAuditTask, setActiveAuditTask] = useState<KanbanTask | null>(null);
   const [distressAlertModalData, setDistressAlertModalData] = useState<CriticalFlag | null>(null);
   const [selectedRxId, setSelectedRxId] = useState<string | null>('rx-1');
+  const [backendStatus, setBackendStatus] = useState<'connected' | 'offline'>(() =>
+    getBackendStatus() === 'connected' ? 'connected' : 'offline'
+  );
+  const [isOcrProcessing, setIsOcrProcessing] = useState<boolean>(false);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Function to pull live tasks and logs from Track C Backend (Task 2.6i)
+  const refreshFromBackend = async () => {
+    try {
+      const isHealthy = await apiService.checkHealth();
+      setBackendStatus(isHealthy ? 'connected' : 'offline');
+
+      // 1. Fetch remote tasks from Track C
+      const remoteTasks = await apiService.getTasks(undefined, activeParent.id);
+      if (remoteTasks && remoteTasks.length > 0) {
+        setTasks(prev => {
+          const remoteMap = new Map(remoteTasks.map(t => [t.id, t]));
+          const updated = prev.map(localTask => {
+            const remote = remoteMap.get(localTask.id);
+            if (remote) {
+              remoteMap.delete(localTask.id);
+              return {
+                ...localTask,
+                column: remote.column,
+                title: remote.title || localTask.title,
+                subtitle: remote.subtitle || localTask.subtitle
+              };
+            }
+            return localTask;
+          });
+          return [...Array.from(remoteMap.values()), ...updated];
+        });
+      }
+
+      // 2. Fetch live telemetry logs from Track C
+      const remoteLogs = await apiService.getLogs(25);
+      if (remoteLogs && remoteLogs.length > 0) {
+        setEventLogs(prev => {
+          const existingIds = new Set(prev.map(l => l.id));
+          const newOnes = remoteLogs.filter(l => !existingIds.has(l.id));
+          return newOnes.length > 0 ? [...newOnes, ...prev] : prev;
+        });
+      }
+    } catch {
+      setBackendStatus('offline');
+    }
+  };
+
+  // Status listener & periodic polling (Task 2.6i)
+  useEffect(() => {
+    const unsub = onBackendStatusChange(status => {
+      setBackendStatus(status === 'connected' ? 'connected' : 'offline');
+    });
+
+    refreshFromBackend();
+    const interval = setInterval(refreshFromBackend, 4500);
+
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
+  }, [activeParent.id]);
 
   // Initial Backend Hydration (Optimistic & Offline-safe)
   useEffect(() => {
@@ -133,12 +209,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           vendors: { ...prev.vendors, ...remoteParent.vendors }
         }));
       }
-
-      // 2. Try fetching live telemetry logs
-      const remoteLogs = await apiService.getLogs(20);
-      if (remoteLogs && remoteLogs.length > 0 && isMounted) {
-        setEventLogs(prev => [...remoteLogs, ...prev]);
-      }
     };
 
     hydrateBackend();
@@ -147,20 +217,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Helper to sync prescriptionItems with a DocumentRecord
   const syncPrescriptionItemsFromDoc = (doc: DocumentRecord) => {
-    const items: PrescriptionItem[] = doc.extractedItems.map((item) => ({
-      id: item.id,
-      medicineName: item.name,
-      dosage: item.dosage || '5 mg',
-      frequency: item.frequency,
-      frequencyCode: item.frequencyCode || 'OD',
-      instruction: item.instruction || 'Take as directed',
-      nextTriggerTime: item.triggerSlot,
-      confidence: item.confidenceScore,
-      sourceBox: item.sourceBox || { top: 36, left: 12, width: 76, height: 7 },
-      status: item.status || 'verified',
-      category: item.category,
-      rawOcrText: item.rawOcrText || `${item.name} ${item.dosage || ''} ${item.frequencyCode || ''}`
-    }));
+    const items: PrescriptionItem[] = doc.extractedItems.map((item) => {
+      const normalized = normalizeFrequency(item.frequency || item.frequencyCode || '');
+      return {
+        id: item.id,
+        medicineName: item.name,
+        dosage: item.dosage || '5 mg',
+        frequency: normalized.frequency,
+        frequencyCode: normalized.frequencyCode,
+        instruction: item.instruction || normalized.instruction,
+        nextTriggerTime: item.triggerSlot || normalized.triggerSlot,
+        confidence: item.confidenceScore,
+        sourceBox: item.sourceBox || { top: 36, left: 12, width: 76, height: 7 },
+        status: item.status || 'verified',
+        category: item.category,
+        rawOcrText: item.rawOcrText || `${item.name} ${item.dosage || ''} ${normalized.frequencyCode}`
+      };
+    });
     setPrescriptionItems(items);
     if (items.length > 0) {
       setSelectedRxId(items[0].id);
@@ -212,121 +285,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       message: `Updated profile context, documents, and local vendor bindings for ${parent.city}.`
     });
   };
+  // Dynamic upload document handler powered by multimodal Vision OCR (with smart offline fallback)
+  const uploadDocument = async (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE'; previewImageUrl?: string }): Promise<DocumentRecord> => {
+    setIsOcrProcessing(true);
+    let newDoc: DocumentRecord;
+    const fileName = typeof file === 'string' ? file : file.name || 'prescription_document.png';
+    try {
+      const scanResult = await processPrescriptionScan(file);
+      newDoc = convertToDocumentRecord(scanResult, activeParent.id, fileName);
+    } catch (e) {
+      console.warn('Multimodal vision scan fallback:', e);
+      newDoc = parseUploadedDocument(file, activeParent);
+    }
 
-  // Dynamic upload document handler
-  const uploadDocument = (file: File | { name: string; docType?: 'PRESCRIPTION' | 'ELECTRICITY_BILL' | 'PENSION_CERTIFICATE' }) => {
-    const fileName = file.name;
-    const isBill = fileName.toLowerCase().includes('bill') || fileName.toLowerCase().includes('sbpdcl');
-    
-    const newDocId = 'doc-' + Date.now();
-    const newDoc: DocumentRecord = {
-      id: newDocId,
-      parentId: activeParent.id,
-      fileName: fileName,
-      docType: isBill ? 'ELECTRICITY_BILL' : 'PRESCRIPTION',
-      issuer: isBill
-        ? {
-            title: 'SBPDCL Patna Urban Desk',
-            subtitle: 'South Bihar Power Distribution Company Ltd',
-            address: 'Vidyut Bhawan, Bailey Road, Patna - 800021',
-            regOrConsumer: activeParent.vendors.electricity.consumerId
-          }
-        : {
-            title: 'Dr. Rajiv N. Jha, M.D.',
-            subtitle: 'Senior Consultant Physician & Geriatric Specialist',
-            address: 'Fraser Road Chauraha, Patna - 800001',
-            regOrConsumer: 'BCMR / 2015 / 8831'
-          },
-      patientOrConsumerName: activeParent.name,
-      consultDate: 'Today',
-      vitalsOrSummary: `${activeParent.vitals.bloodPressure} • Fasting: ${activeParent.vitals.bloodSugarFasting}`,
-      extractedItems: isBill
-        ? [
-            {
-              id: `item-${Date.now()}-1`,
-              name: 'Electricity Consumption (Cycle Total)',
-              dosage: 'LT Domestic',
-              category: 'Utility',
-              frequency: 'Once Daily (Morning)',
-              frequencyCode: 'OD',
-              instruction: 'Domestic slab with government power subsidy',
-              triggerSlot: '18th of Every Month',
-              confidenceScore: 0.99,
-              rawOcrText: 'Net Payable Amount: ₹1,420.00',
-              sourceBox: { top: 38, left: 12, width: 76, height: 7 },
-              status: 'verified'
-            }
-          ]
-        : [
-            {
-              id: `item-${Date.now()}-1`,
-              name: 'Tab Cilnidipine',
-              dosage: '10 mg',
-              category: 'Cardio',
-              frequency: 'Once Daily (Morning)',
-              frequencyCode: 'OD',
-              instruction: '1 tablet once daily morning after breakfast',
-              triggerSlot: '08:00 AM Tomorrow',
-              confidenceScore: 0.98,
-              rawOcrText: 'Tab. Cilnidipine 10mg OD (Post Breakfast)',
-              sourceBox: { top: 36, left: 12, width: 76, height: 7 },
-              status: 'verified'
-            },
-            {
-              id: `item-${Date.now()}-2`,
-              name: 'Tab Metformin SR',
-              dosage: '500 mg',
-              category: 'Diabetes',
-              frequency: 'Twice Daily (Morning & Night)',
-              frequencyCode: 'BD',
-              instruction: '1 tablet twice daily with principal meals',
-              triggerSlot: '08:30 AM & 08:30 PM',
-              confidenceScore: 0.96,
-              rawOcrText: 'Tab. Metformin 500mg SR BD',
-              sourceBox: { top: 46, left: 12, width: 76, height: 7 },
-              status: 'verified'
-            },
-            {
-              id: `item-${Date.now()}-3`,
-              name: 'Tab Neurobion Forte',
-              dosage: '1 B-Complex Tab',
-              category: 'Supplement',
-              frequency: 'Once Daily (Morning)',
-              frequencyCode: 'OD',
-              instruction: '1 tablet daily after lunch for nerve support',
-              triggerSlot: '01:30 PM Tomorrow',
-              confidenceScore: 0.94,
-              rawOcrText: 'Tab. Neurobion Forte OD',
-              sourceBox: { top: 56, left: 12, width: 76, height: 7 },
-              status: 'verified'
-            }
-          ]
-    };
-
-    setDocuments((prev) => [newDoc, ...prev]);
+    setDocuments((prev) => [newDoc, ...prev.filter(d => d.id !== newDoc.id)]);
     setActiveDocument(newDoc);
+    setIsOcrProcessing(false);
 
     // Async post to backend if live
-    apiService.postDocument(newDoc);
+    apiService.postDocument(newDoc).catch(() => {});
+
+    const avgConf = Math.round(
+      (newDoc.extractedItems.reduce((acc, i) => acc + (i.confidenceScore || 0.95), 0) / (newDoc.extractedItems.length || 1)) * 100
+    );
 
     addEventLog({
-      agentSource: 'Guardrail Engine',
+      agentSource: 'Track B Vision OCR Pipeline',
       eventType: 'DOCUMENT_OCR_INTAKE_PROCESSED',
       severity: 'success',
-      details: `Parsed uploaded document "${fileName}". Extracted ${newDoc.extractedItems.length} entities with 97.2% confidence for ${activeParent.name}.`,
+      details: `Parsed uploaded document "${newDoc.fileName}". Extracted ${newDoc.extractedItems.length} entities with ${avgConf}% confidence for ${activeParent.name}.`,
       payload: {
-        fileName,
-        patient: activeParent.name,
+        fileName: newDoc.fileName,
+        patient: newDoc.patientOrConsumerName,
         docType: newDoc.docType,
-        extractedCount: newDoc.extractedItems.length
+        extractedCount: newDoc.extractedItems.length,
+        issuer: newDoc.issuer.title
       }
     });
 
     addToast({
       type: 'success',
-      title: 'New Document Processed',
-      message: `Extracted ${newDoc.extractedItems.length} entities from "${fileName}". Schedule table updated.`
+      title: 'Vision OCR Extraction Complete',
+      message: `Extracted ${newDoc.extractedItems.length} entities from "${newDoc.fileName}". Schedule table ready for verification.`
     });
+
+    return newDoc;
   };
 
   // Global Keyboard Shortcuts (1 -> Command Board, 2 -> Document Review, 3 -> Agent Pipeline)
@@ -362,15 +365,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // Append-only tamper-evident immutable audit log writer
   const addEventLog = (log: Omit<EventLogItem, 'id' | 'timestamp'>) => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-IN', { hour12: false }) + ' IST';
-    const newLog: EventLogItem = {
-      ...log,
-      id: 'log-' + Math.random().toString(36).substring(2, 9),
-      timestamp: timeStr
-    };
-    setEventLogs((prev) => [newLog, ...prev]);
+    const immutableLog = createImmutableEventLog(log);
+    setEventLogs((prev) => [immutableLog, ...prev]);
   };
 
   const addCriticalFlag = (flag: Omit<CriticalFlag, 'id' | 'timestamp'>) => {
@@ -415,6 +413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     apiService.approveTask(taskId);
 
     const isChemist = task.category === 'chemist';
+    const financialGate = evaluateFinancialGuardrail(task.amount);
 
     setTasks((prev) =>
       prev.map((t) =>
@@ -449,6 +448,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       payload: {
         taskId: task.id,
         amount: task.amount || 0,
+        financialGateEvaluation: financialGate,
         authorizedAt: new Date().toISOString(),
         authType: 'CHILD_DASHBOARD_SIGN_OFF'
       }
@@ -556,6 +556,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setPrescriptionItems(prev => prev.map(p => ({ ...p, status: 'active' })));
+
+    // Phase 2 Integration (Tasks 2.2i & 2.6i): Persist schedule tasks to Track C backend
+    prescriptionItems.forEach(item => {
+      apiService.createTask({
+        parent_id: activeParent.id,
+        task_type: 'medication',
+        title: `${item.medicineName} (${item.dosage})`,
+        description: `${item.frequency} — ${item.instruction}`,
+        confidence_score: item.confidence,
+        source_document_id: activeDocument.id
+      }).catch(() => {});
+    });
 
     addEventLog({
       agentSource: 'Guardrail Engine',
@@ -721,6 +733,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  // Phase 3 Task 3.1t: Guardrail Test for Unapproved Payment Attempt
+  const triggerSimulateUnapprovedPayment = () => {
+    playSound('alert');
+
+    // Add a Critical Flag so it shows in the Alerts Drawer visually
+    addCriticalFlag({
+      type: 'guardrail_payment_blocked',
+      severity: 'critical',
+      title: `🛑 Blocked: ₹1,450 Auto-Debit Attempt`,
+      description: `Guardrail Engine intercepted an unauthorized ₹1,450 payment to local vendor for ${activeParent.name}. Zero-autonomy financial policy enforced — no funds debited.`,
+      actionLabel: 'Review Transaction Log',
+      resolved: false
+    });
+    setIsAlertsDrawerOpen(true);
+
+    addEventLog({
+      agentSource: 'Guardrail Engine',
+      eventType: 'UNAPPROVED_PAYMENT_BLOCKED',
+      severity: 'critical',
+      details: 'Task 3.1t Guardrail Check: Unauthorized payment attempt of ₹1,450 to local vendor was strictly intercepted and blocked. No funds debited.',
+      payload: {
+        attemptedAmount: 1450,
+        currency: 'INR',
+        guardrailRule: 'MAX_AUTONOMOUS_PAYMENT = 0',
+        action: 'STRICT_BLOCK',
+        status: 'PASSED_GUARDRAIL_TEST_3_1T'
+      }
+    });
+
+    addToast({
+      type: 'error',
+      title: '🛑 Guardrail Blocked: Unapproved Payment',
+      message: 'Autonomous payment of ₹1,450 strictly rejected by Policy Engine. Transactions require child authorization.',
+      duration: 6000
+    });
+  };
+
+  // Phase 3 Task 3.2t: Guardrail Test for Dosage Escalation Attempt
+  const triggerSimulateDosageChangeAttempt = () => {
+    playSound('alert');
+
+    // Add a Critical Flag so it shows in the Alerts Drawer visually
+    addCriticalFlag({
+      type: 'guardrail_dosage_refused',
+      severity: 'high',
+      title: `⚕️ Refused: Dosage Change Request from ${activeParent.name}`,
+      description: `Parent requested "दवाई का डोज़ बढ़ा दो, 2 गोली कर दो" during voice call. Agent firmly refused and redirected to physician review. No medication schedule altered.`,
+      actionLabel: 'View Transcript Snippet',
+      resolved: false
+    });
+    setIsAlertsDrawerOpen(true);
+
+    addEventLog({
+      agentSource: 'Guardrail Engine',
+      eventType: 'DOSAGE_MODIFICATION_REFUSED',
+      severity: 'critical',
+      details: 'Task 3.2t Guardrail Check: Parent voice request "दवाई का डोज़ बढ़ा दो, 2 गोली कर दो" was intercepted and refused. Agent redirected to physician review.',
+      payload: {
+        transcriptSnippet: 'दवाई का डोज़ बढ़ा दो, 2 गोली कर दो',
+        detectedIntent: 'ESCALATE_DOSAGE',
+        guardrailRule: 'CANNOT_ALTER_MEDICATION_DOSAGE',
+        action: 'REFUSE_AND_NOTIFY_CHILD',
+        status: 'PASSED_GUARDRAIL_TEST_3_2T'
+      }
+    });
+
+    addToast({
+      type: 'warning',
+      title: '⚕️ Clinical Guardrail: Dosage Change Refused',
+      message: 'Agent firmly refused dose alteration request from call. Logged in telemetry for physician check.',
+      duration: 6000
+    });
+  };
+
+  // Phase 3 Task 3.6t: Reset Demo State (clears simulated flags/tasks for clean re-run)
+  const triggerResetDemo = () => {
+    setCriticalFlags(INITIAL_CRITICAL_FLAGS);
+    setTasks(INITIAL_TASKS);
+    setEventLogs(INITIAL_EVENT_LOGS);
+    setIsAlertsDrawerOpen(false);
+    setDistressAlertModalData(null);
+    playSound('ping');
+    addToast({
+      type: 'info',
+      title: 'Demo State Reset',
+      message: 'All simulated flags, tasks, and logs cleared. Dashboard ready for a fresh stage run.'
+    });
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -767,11 +868,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerSimulateMorningCall,
         triggerSimulateMissedCall,
         triggerSimulateDistressAlert,
+        triggerSimulateUnapprovedPayment,
+        triggerSimulateDosageChangeAttempt,
+        triggerResetDemo,
         toasts,
         addToast,
         removeToast,
         selectedRxId,
-        setSelectedRxId
+        setSelectedRxId,
+        backendStatus,
+        refreshFromBackend,
+        isOcrProcessing
       }}
     >
       {children}

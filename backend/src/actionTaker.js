@@ -112,26 +112,52 @@ async function processCallOutcome(outcome) {
 // Sub-actions (will integrate with WhatsApp API in Task 3.5)
 // -------------------------------------------------------------------
 
+const { sendWhatsAppMessage } = require('./whatsapp');
+
 async function dispatchMedicineOrder(task, callId, transcript, parentResponse) {
   console.log(`[ACTION] Dispatching medicine order for task ${task.id}`);
 
-  // TODO (Task 3.5): Send WhatsApp message to chemist via WhatsApp Business API
-  // const waResult = await sendWhatsAppMessage({ to: vendor.phone, body: messageBody });
+  // Fetch the chemist phone from vendors
+  const { rows } = await pool.query("SELECT * FROM vendors WHERE parent_id = $1 AND vendor_type = 'chemist' LIMIT 1", [task.parent_id]);
+  const chemistPhone = rows.length > 0 ? rows[0].phone : null;
+
+  let waResult = null;
+  // 2.5i: Wire Action-Taker output into WhatsApp message sends using templates
+  if (chemistPhone) {
+    try {
+      // In a real flow, task.payload would contain the extracted medicine_name, quantity, and delivery_address
+      const medicineName = task.payload?.medicine_name || 'Prescription Medicines';
+      const quantity = task.payload?.quantity || '1 month supply';
+      const deliveryAddress = task.payload?.delivery_address || 'Parent Home Address';
+
+      waResult = await sendWhatsAppMessage(
+        chemistPhone,
+        'order_confirmation', // Must match approved template in Meta Dashboard
+        [medicineName, quantity.toString(), deliveryAddress]
+      );
+      
+      console.log(`[ACTION] WhatsApp template sent to chemist at ${chemistPhone}`);
+    } catch (err) {
+      console.error(`[ACTION] Failed to send WhatsApp message:`, err.message);
+    }
+  }
 
   await logAction({
     taskId: task.id,
     callId,
     actor: 'action_taker',
     action: 'whatsapp_order_queued',
-    result: 'success',
+    result: waResult && waResult.id ? 'success' : 'failed',
     payload: {
       task_type: task.task_type,
       parent_response: parentResponse,
-      note: 'WhatsApp integration pending (Task 3.5)',
+      chemistPhone,
+      messageId: waResult?.id,
+      note: 'WhatsApp integration via Template (Task 3.5)',
     },
   });
 
-  // For now: requires child approval before sending (demo-safe)
+  // For now: requires child approval before finalizing (demo-safe)
   return { success: true, needsApproval: true, actionType: 'whatsapp_medicine_order' };
 }
 

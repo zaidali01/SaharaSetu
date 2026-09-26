@@ -25,23 +25,25 @@ function getClient() {
   return twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 }
 
-async function placeCall(attempt = 1) {
+async function placeCall(attempt = 1, phone = null, taskId = null) {
   requireEnv('TWILIO_FROM_NUMBER', TWILIO_FROM_NUMBER);
-  requireEnv('PARENT_TEST_NUMBER', PARENT_TEST_NUMBER);
+  const targetPhone = phone || process.env.PARENT_TEST_NUMBER;
+  if (!targetPhone) requireEnv('PARENT_TEST_NUMBER', process.env.PARENT_TEST_NUMBER);
   requireEnv('PUBLIC_BASE_URL', PUBLIC_BASE_URL);
 
   const client = getClient();
+  const qs = taskId ? `?taskId=${taskId}` : '';
 
   try {
     const call = await client.calls.create({
-      to: PARENT_TEST_NUMBER,
+      to: targetPhone,
       from: TWILIO_FROM_NUMBER,
-      url: `${PUBLIC_BASE_URL}/voice`,
+      url: `${PUBLIC_BASE_URL}/voice${qs}`,
       // statusCallback fires when the call reaches a final state (answered,
       // no-answer, busy, failed). server.js's /call-status route uses this
       // to decide whether to retry. attempt is passed via query string since
       // Twilio's webhook body won't carry it for us.
-      statusCallback: `${PUBLIC_BASE_URL}/call-status?attempt=${attempt}`,
+      statusCallback: `${PUBLIC_BASE_URL}/call-status?attempt=${attempt}${taskId ? `&taskId=${taskId}` : ''}`,
       statusCallbackEvent: ['completed'],
       statusCallbackMethod: 'POST',
     });
