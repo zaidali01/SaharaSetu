@@ -102,6 +102,7 @@ export interface DocumentRecord {
   vitalsOrSummary: string; // e.g. "BP: 128/82, Fasting: 114 mg/dL"
   extractedItems: ExtractedItem[];
   previewImageUrl?: string;
+  status?: 'pending_review' | 'processed' | string;
 }
 
 export interface PrescriptionItem {

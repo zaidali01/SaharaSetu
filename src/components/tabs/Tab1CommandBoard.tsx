@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Clock, Play, ShieldCheck, RefreshCw, AlertCircle
@@ -9,7 +9,7 @@ export const Tab1CommandBoard: React.FC = () => {
   const {
     tasks, approveTask, rejectTask,
     setActiveTranscriptTask, setActiveChemistModalTask, setActiveAuditTask,
-    activeParent, refreshFromBackend,
+    refreshFromBackend,
     setIsGuardrailsOpen,
   } = useApp();
 
