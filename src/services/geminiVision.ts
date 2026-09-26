@@ -238,30 +238,30 @@ export function parseRawOcrTextToDoc(
     };
   }
 
-  // Pattern 5: Generic Line-by-Line Parser for ANY other document text
+  // Pattern 5: Generic Line-by-Line Parser for ANY document or OCR text
   const lines = rawText
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l.length > 2);
+    .filter((l) => l.length > 1);
 
-  let doctorName = 'Dr. S. K. Verma, M.D.';
-  let clinicName = 'Clinical Consultation Center';
-  let patientName = 'Verified Patient';
-  let ageLocation = 'Senior Citizen';
+  let doctorName = 'Uploaded Document Scan';
+  let clinicName = 'Document Intake Desk';
+  let patientName = lines[0] || fileName.replace(/\.[^/.]+$/, "");
+  let ageLocation = 'Self-Uploaded Record';
   let recordDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  let vitals = 'BP: 130/80 mmHg';
+  let vitals = rawText.trim() ? `OCR: "${rawText.trim().replace(/\s+/g, ' ').slice(0, 50)}"` : 'No clinical vitals detected';
   const customMedicines: ExtractedMedicine[] = [];
 
   for (const line of lines) {
-    if (/(dr\.|doctor|mbbs|m\.d\.|physician)/i.test(line) && !doctorName.includes(line)) {
+    if (/(dr\.|doctor|mbbs|m\.d\.|physician|clinic|hospital)/i.test(line)) {
       doctorName = line;
-    } else if (/(patient|name|pt\.)/i.test(line) && !patientName.includes(line)) {
+    } else if (/(patient|name|pt\.)/i.test(line)) {
       patientName = line.replace(/^(patient\s*name\s*[:\-]?|name\s*[:\-]?|patient\s*[:\-]?)/i, '').trim();
-    } else if (/(bp|vitals|sugar|hba1c)/i.test(line)) {
+    } else if (/(bp|vitals|sugar|hba1c|pulse|spo2)/i.test(line)) {
       vitals = line;
     } else if (
       /\b(tab|cap|syr|inj|sachet|gel|mg|mcg|ml|od|bd|bid|tds|hs|sos)\b/i.test(line) &&
-      !/(dr\.|patient|clinic|address|phone)/i.test(line)
+      !/(dr\.|patient|clinic|address|phone|hospital)/i.test(line)
     ) {
       const strengthMatch = line.match(/\b(\d+(\.\d+)?\s*(mg|mcg|ml|gm|g|iu|k|%))\b/i);
       const strength = strengthMatch ? strengthMatch[1] : 'Standard Dose';
@@ -280,56 +280,20 @@ export function parseRawOcrTextToDoc(
         category,
         cadence: freq.frequency,
         scheduleSlot: freq.triggerSlot,
-        confidence: 98,
+        confidence: 95,
         sourceBox: { top: 38 + customMedicines.length * 12, left: 12, width: 76, height: 8 }
       });
     }
   }
 
-  if (customMedicines.length > 0) {
-    return {
-      doctorName,
-      clinicName,
-      patientName,
-      ageLocation,
-      recordDate,
-      vitals,
-      medicines: customMedicines,
-      rawImagePreviewUrl: previewUrl,
-      extractionEngine: 'In-Browser Tesseract OCR'
-    };
-  }
-
-  // Final Fallback: Dr. Anjali Deshmukh
   return {
-    doctorName: 'Dr. Anjali Deshmukh, MBBS, DNB (Int. Med)',
-    clinicName: 'The Heart & Diabetes Centre, Hyderabad',
-    patientName: 'Vikram Malhotra',
-    ageLocation: '62 Yrs • Banjara Hills',
-    recordDate: '26-Sep-2026',
-    vitals: 'BP: 150/95, Fasting: 110 mg/dL',
-    medicines: [
-      {
-        id: 'med_1',
-        name: 'Tab. Rosuvastatin',
-        strength: '10mg',
-        category: 'Lipid',
-        cadence: 'At Bedtime (Night)',
-        scheduleSlot: '09:00 PM Tonight',
-        confidence: 98,
-        sourceBox: { top: 38, left: 12, width: 76, height: 8 }
-      },
-      {
-        id: 'med_2',
-        name: 'Tab. Metformin XR',
-        strength: '1000mg',
-        category: 'Diabetes',
-        cadence: 'Twice Daily (Morning & Night)',
-        scheduleSlot: '08:30 AM Tomorrow',
-        confidence: 99,
-        sourceBox: { top: 50, left: 12, width: 76, height: 8 }
-      }
-    ],
+    doctorName,
+    clinicName,
+    patientName,
+    ageLocation,
+    recordDate,
+    vitals,
+    medicines: customMedicines,
     rawImagePreviewUrl: previewUrl,
     extractionEngine: 'In-Browser Tesseract OCR'
   };
