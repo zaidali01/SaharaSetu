@@ -215,4 +215,36 @@ async function fetchMessageStatus(messageSid) {
   };
 }
 
-module.exports = { sendWhatsAppMessage, fetchMessageStatus, toWhatsAppAddress, buildOrderBody, resolveSender };
+/**
+ * Wait (briefly) for a terminal delivery state.
+ *
+ * This exists because Twilio answering 200 with `queued` proves nothing. A
+ * send to a number that has not opted in is accepted as `queued` and then
+ * fails with 63015 seconds later, so a caller that trusts the send response
+ * marks the task done while the chemist never received it — the same
+ * silent-success bug the Meta integration had. Blocking a few seconds turns
+ * that into an honest result at approve time.
+ *
+ * @returns {Promise<{status:string, errorCode?:string, errorMessage?:string, delivered:boolean}>}
+ */
+async function waitForDelivery(messageSid, { timeoutMs = 15000, intervalMs = 1500 } = {}) {
+  const terminal = new Set(['delivered', 'read', 'failed', 'undelivered']);
+  const deadline = Date.now() + timeoutMs;
+  let last = { status: 'queued' };
+
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, intervalMs));
+    try {
+      const s = await fetchMessageStatus(messageSid);
+      last = s;
+      if (terminal.has(s.status)) {
+        return { ...s, delivered: s.status === 'delivered' || s.status === 'read' };
+      }
+    } catch {
+      // Transient API error; keep polling until the deadline.
+    }
+  }
+  return { ...last, delivered: false, timedOut: true };
+}
+
+module.exports = { sendWhatsAppMessage, fetchMessageStatus, waitForDelivery, toWhatsAppAddress, buildOrderBody, resolveSender };

@@ -218,9 +218,15 @@ router.post('/tasks/:id/reject', async (req, res) => {
 router.post('/calls/outcome', async (req, res) => {
   try {
     const result = await processCallOutcome(req.body);
+    // Do not answer 200 for a dropped outcome. Track A treats a 2xx as "handled"
+    // and moves on, so a rejected state transition would be lost entirely.
+    if (result && result.success === false) {
+      return res.status(409).json(result);
+    }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const status = err.transitionFailed ? 409 : 500;
+    res.status(status).json({ error: err.message, success: false });
   }
 });
 

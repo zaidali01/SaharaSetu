@@ -14,7 +14,7 @@ const { pool } = require('../db');
 const { transitionTask } = require('./stateMachine');
 const { runGuardrails } = require('./guardrails');
 const { logAction } = require('./logger');
-const { sendWhatsAppMessage } = require('./whatsapp');
+const { sendWhatsAppMessage, waitForDelivery } = require('./whatsapp');
 
 const MAX_CALL_RETRIES = parseInt(process.env.MAX_CALL_RETRIES || '2');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,6 +111,23 @@ async function countNoAnswers(taskId) {
 }
 
 /**
+ * transitionTask() returns { success, error } and does NOT throw on an invalid
+ * edge. Every call site here used to await it and discard the result, so a
+ * rejected transition was completely silent: the action was still logged as
+ * prepared, the route still answered 200, and the task sat in the wrong state
+ * with nothing to indicate why. This throws instead.
+ */
+async function transitionOrThrow(taskId, newStatus, ctx) {
+  const res = await transitionTask(taskId, newStatus, ctx);
+  if (!res.success) {
+    const err = new Error(`Cannot move task to ${newStatus}: ${res.error}`);
+    err.transitionFailed = true;
+    throw err;
+  }
+  return res;
+}
+
+/**
  * Process a call outcome and execute the appropriate action.
  * @param {object} outcome
  * @param {string} outcome.taskId
@@ -133,6 +150,24 @@ async function processCallOutcome(outcome) {
   }
   const task = rows[0];
 
+  // An outcome is proof a call happened, but the task can still be `pending`
+  // if the planner's awaiting_call transition hasn't committed yet, or if the
+  // outcome raced the trigger. pending -> awaiting_approval is not a legal
+  // edge, so the whole outcome used to be dropped in silence. Advance first.
+  if (task.status === 'pending') {
+    console.log(`[ACTION] Task ${taskId} still pending on call outcome; advancing to awaiting_call.`);
+    try {
+      await transitionOrThrow(taskId, 'awaiting_call', {
+        actor: 'action_taker', callSid: callSid || null,
+        reason: 'Call outcome received while the task was still pending.',
+      });
+      task.status = 'awaiting_call';
+    } catch (err) {
+      console.error(`[ACTION] ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  }
+
   const resolvedCallId = await resolveCallRecord({
     callId, callSid, taskId, callStatus, transcript, parentId: task.parent_id,
   });
@@ -147,7 +182,7 @@ async function processCallOutcome(outcome) {
     });
     const priorNoAnswers = await countNoAnswers(taskId);
     if (priorNoAnswers > MAX_CALL_RETRIES) {
-      await transitionTask(taskId, 'couldnt_complete', {
+      await transitionOrThrow(taskId, 'couldnt_complete', {
         actor: 'action_taker', callId: resolvedCallId,
         reason: `No answer after ${MAX_CALL_RETRIES} call attempts.`,
       });
@@ -165,7 +200,7 @@ async function processCallOutcome(outcome) {
       action: 'distress_flag_raised', result: 'escalated',
       payload: { ...logCtx, transcript: transcript?.slice(0, 200) },
     });
-    await transitionTask(taskId, 'awaiting_approval', {
+    await transitionOrThrow(taskId, 'awaiting_approval', {
       actor: 'action_taker', callId: resolvedCallId,
       reason: 'Distress detected on the call. No action was taken.',
     });
@@ -185,7 +220,7 @@ async function processCallOutcome(outcome) {
   });
 
   if (!guardrail.allowed) {
-    await transitionTask(taskId, 'awaiting_approval', {
+    await transitionOrThrow(taskId, 'awaiting_approval', {
       actor: 'guardrail', callId: resolvedCallId, reason: guardrail.reason, payload: logCtx,
     });
     return { success: false, blocked: true, reason: guardrail.reason, status: 'awaiting_approval' };
@@ -205,7 +240,7 @@ async function processCallOutcome(outcome) {
     // awaiting_approval and couldnt_complete. "The parent said no" means the
     // task cannot be completed, so couldnt_complete is the correct terminal
     // state — awaiting_call -> done is not a valid edge.
-    await transitionTask(taskId, 'couldnt_complete', {
+    await transitionOrThrow(taskId, 'couldnt_complete', {
       actor: 'action_taker', callId: resolvedCallId, reason, payload: logCtx,
     });
     return { success: true, action: 'closed_without_action', decision, status: 'couldnt_complete' };
@@ -218,7 +253,7 @@ async function processCallOutcome(outcome) {
       action: 'flagged_for_child_review', result: 'pending_review',
       payload: { ...logCtx, transcript: transcript?.slice(0, 200) },
     });
-    await transitionTask(taskId, 'awaiting_approval', {
+    await transitionOrThrow(taskId, 'awaiting_approval', {
       actor: 'action_taker', callId: resolvedCallId, reason, payload: logCtx,
     });
     return { success: true, action: 'flagged_for_child_review', status: 'awaiting_approval' };
@@ -235,13 +270,13 @@ async function processCallOutcome(outcome) {
   }
 
   if (actionResult.needsApproval) {
-    await transitionTask(taskId, 'awaiting_approval', {
+    await transitionOrThrow(taskId, 'awaiting_approval', {
       actor: 'action_taker', callId: resolvedCallId,
       reason: 'Action requires child confirmation before anything is sent.',
       payload: actionResult,
     });
   } else if (!actionResult.success) {
-    await transitionTask(taskId, 'couldnt_complete', {
+    await transitionOrThrow(taskId, 'couldnt_complete', {
       actor: 'action_taker', callId: resolvedCallId, reason: actionResult.error,
     });
   }
@@ -324,12 +359,48 @@ async function executeApprovedAction(task, { actor = 'parent', approvedBy = 'das
     [order.medicineName, order.quantity, order.deliveryAddress]
   );
 
+  // `queued` is not delivery. Poll for a terminal state before claiming the
+  // order went out, otherwise an unopted-in recipient (63015) is logged as a
+  // success and the task closes with the chemist unaware of the order.
+  let delivery = { status: result?.status, delivered: false, timedOut: false };
+  if (process.env.WHATSAPP_DRY_RUN === 'true' || String(result?.id || '').startsWith('dry-run')) {
+    delivery = { status: 'dry_run', delivered: false, dryRun: true };
+  } else if (result?.id) {
+    delivery = await waitForDelivery(result.id);
+  }
+
+  const delivered = delivery.delivered || delivery.status === 'dry_run';
+
   await logAction({
-    taskId: task.id, actor, action: 'whatsapp_order_sent', result: 'success',
-    payload: { order, chemistPhone, messageId: result?.id, deliveryStatus: result?.status, approvedBy },
+    taskId: task.id, actor, action: 'whatsapp_order_sent',
+    result: delivered ? 'success' : 'failed',
+    payload: {
+      order, chemistPhone,
+      messageId: result?.id,
+      deliveryStatus: delivery.status,
+      deliveryErrorCode: delivery.errorCode ?? null,
+      deliveryErrorMessage: delivery.errorMessage ?? null,
+      deliveryConfirmed: delivered,
+      approvedBy,
+    },
   });
 
-  return { dispatched: true, chemistPhone, messageId: result?.id, deliveryStatus: result?.status, order };
+  if (!delivered) {
+    // Leave the task in awaiting_approval so the child sees the failure and
+    // can retry, rather than a task closed on a message nobody received.
+    return {
+      dispatched: false,
+      reason: `WhatsApp message to the chemist did not reach the handset ` +
+        `(Twilio status "${delivery.status}"` +
+        (delivery.errorCode ? `, error ${delivery.errorCode}` : '') +
+        `${delivery.timedOut ? ', still unconfirmed after waiting' : ''}). ` +
+        `The usual cause is that number not having opted in to the WhatsApp sender.`,
+      chemistPhone, messageId: result?.id, deliveryStatus: delivery.status,
+      deliveryErrorCode: delivery.errorCode ?? null, order,
+    };
+  }
+
+  return { dispatched: true, chemistPhone, messageId: result?.id, deliveryStatus: delivery.status, order };
 }
 
 module.exports = { processCallOutcome, executeApprovedAction, resolveDecision };
