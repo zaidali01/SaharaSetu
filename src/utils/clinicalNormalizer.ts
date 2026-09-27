@@ -30,23 +30,23 @@ export function repairMedicineName(rawName: string): string {
 
   // 1. Statins (Lipid Lowering)
   if (
-    lower === 'statin' ||
-    lower === 'tab. statin' ||
-    lower === 'tab statin' ||
-    lower.endsWith(' statin') ||
-    lower.includes('rosuva') ||
-    lower.includes('rozavel') ||
-    lower.includes('crestor')
-  ) {
-    return 'Tab. Rosuvastatin';
-  }
-  if (
     lower.includes('atorva') ||
     lower.includes('storvas') ||
     lower.includes('lipitor') ||
-    lower.includes('atorlip')
+    lower.includes('atorlip') ||
+    lower.includes('atorfit')
   ) {
     return 'Tab. Atorvastatin';
+  }
+  if (
+    lower.includes('rosuva') ||
+    lower.includes('rozavel') ||
+    lower.includes('crestor') ||
+    lower === 'statin' ||
+    lower === 'tab. statin' ||
+    lower === 'tab statin'
+  ) {
+    return 'Tab. Rosuvastatin';
   }
 
   // 2. Metformin (Diabetes)

@@ -64,8 +64,8 @@ const KNOWN_MEDICINES: {
 }[] = [
   { matchKeywords: ['amlodipine', 'amlong', 'amlovas', 'stamlo', 'amlo', 'amlod'], canonicalName: 'Tab. Amlodipine', defaultStrength: '5mg', category: 'Cardio' },
   { matchKeywords: ['metformin', 'glycomet', 'glucophage', 'metfor', 'metfo', '1etfor', 'letfor', 'netfor', '1etfori', '1etforı', 'letformin', 'metform', 'metformin hcl', 'metformin xr'], canonicalName: 'Tab. Metformin HCl', defaultStrength: '500mg', category: 'Diabetes' },
-  { matchKeywords: ['rosuvastatin', 'rosuvas', 'crestor', 'rozavel', 'rosuva', 'statin', 'statin 10', 'statin 20', 'statin 5'], canonicalName: 'Tab. Rosuvastatin', defaultStrength: '10mg', category: 'Lipid' },
-  { matchKeywords: ['atorvastatin', 'atorva', 'storvas', 'lipitor', 'ator', 'atorlip', 'atorfit'], canonicalName: 'Tab. Atorvastatin', defaultStrength: '10mg', category: 'Lipid' },
+  { matchKeywords: ['atorvastatin', 'atorva', 'storvas', 'lipitor', 'ator', 'atorlip', 'atorfit'], canonicalName: 'Tab. Atorvastatin', defaultStrength: '20mg', category: 'Lipid' },
+  { matchKeywords: ['rosuvastatin', 'rosuvas', 'crestor', 'rozavel', 'rosuva'], canonicalName: 'Tab. Rosuvastatin', defaultStrength: '10mg', category: 'Lipid' },
   { matchKeywords: ['telmisartan', 'telma', 'telmikind', 'micardis', 'telmi'], canonicalName: 'Tab. Telmisartan', defaultStrength: '40mg', category: 'Cardio' },
   { matchKeywords: ['thyronorm', 'eltroxin', 'levothyroxine', 'thyro'], canonicalName: 'Tab. Thyronorm', defaultStrength: '50mcg', category: 'Thyroid' },
   { matchKeywords: ['glimepiride', 'amaryl', 'glimy', 'glime'], canonicalName: 'Tab. Glimepiride', defaultStrength: '2mg', category: 'Diabetes' },
