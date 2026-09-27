@@ -103,7 +103,10 @@ export const Tab2DocumentIntake: React.FC = () => {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) triggerScanAnimation(e.target.files[0]);
+    if (e.target.files?.[0]) {
+      triggerScanAnimation(e.target.files[0]);
+      e.target.value = '';
+    }
   };
 
   return (
@@ -225,7 +228,7 @@ export const Tab2DocumentIntake: React.FC = () => {
       </div>
 
       {/* ── Two-column layout ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 20, alignItems: 'start' }}>
+      <div className="doc-intake-layout">
 
         {/* LEFT: Upload + Canvas */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -399,22 +402,23 @@ export const Tab2DocumentIntake: React.FC = () => {
             </AnimatePresence>
 
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-light)', background: 'var(--surface-secondary)' }}>
                     {['Medicine & Strength', 'Category', 'Cadence', 'Trigger Slot', 'Confidence', 'Extraction Diff', 'Action'].map(h => (
                       <th 
                         key={h} 
                         style={{ 
-                          padding: '12px 14px', 
+                          padding: '10px 10px', 
                           textAlign: h === 'Action' ? 'center' : 'left', 
                           fontSize: 10, 
                           fontFamily: 'var(--font-mono)', 
                           fontWeight: 700, 
                           color: 'var(--text-muted)', 
                           textTransform: 'uppercase', 
-                          letterSpacing: '0.06em',
-                          minWidth: h === 'Medicine & Strength' ? 240 : undefined
+                          letterSpacing: '0.05em',
+                          whiteSpace: 'nowrap',
+                          minWidth: h === 'Medicine & Strength' ? 170 : undefined
                         }}
                       >
                         {h}
@@ -439,28 +443,28 @@ export const Tab2DocumentIntake: React.FC = () => {
                           cursor: 'pointer', transition: 'background 0.15s'
                         }}
                       >
-                        <td style={{ padding: '12px 14px', minWidth: 240 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ width: 24, height: 24, borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</span>
-                            <div style={{ flex: 1, minWidth: 180 }}>
+                        <td style={{ padding: '10px 10px', minWidth: 170 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 22, height: 22, borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{idx + 1}</span>
+                            <div style={{ flex: 1, minWidth: 130 }}>
                               <input
                                 type="text"
                                 value={item.medicineName}
                                 onChange={e => handleNameChange(item.id, e.target.value)}
-                                style={{ fontFamily: 'var(--font-body)', fontWeight: 600, color: 'var(--text-ink)', fontSize: 14, background: 'transparent', border: 'none', outline: 'none', width: '100%', minWidth: 180 }}
+                                style={{ fontFamily: 'var(--font-body)', fontWeight: 600, color: 'var(--text-ink)', fontSize: 13, background: 'transparent', border: 'none', outline: 'none', width: '100%' }}
                               />
                               <p className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.dosage}</p>
                             </div>
                           </div>
                         </td>
-                        <td style={{ padding: '12px 14px' }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', color: 'var(--text-muted)' }}>{item.category}</span>
+                        <td style={{ padding: '10px 8px' }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-muted)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{item.category}</span>
                         </td>
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '10px 8px' }}>
                           <select
                             value={item.frequency}
                             onChange={e => handleFrequencyChange(item.id, e.target.value)}
-                            style={{ fontFamily: 'var(--font-body)', background: '#fff', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: 13, color: 'var(--text-ink)', outline: 'none', cursor: 'pointer' }}
+                            style={{ fontFamily: 'var(--font-body)', background: '#fff', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', fontSize: 12, color: 'var(--text-ink)', outline: 'none', cursor: 'pointer' }}
                           >
                             <option value="Once Daily (Morning)">Once Daily (Morning)</option>
                             <option value="Once Daily (Evening)">Once Daily (Evening)</option>
@@ -472,34 +476,35 @@ export const Tab2DocumentIntake: React.FC = () => {
                             <option value="One-Off Deadline">One-Off Deadline</option>
                           </select>
                         </td>
-                        <td style={{ padding: '12px 14px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 13 }}>
-                            <Clock size={14} /> {item.nextTriggerTime}
+                        <td style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-muted)', fontSize: 12 }}>
+                            <Clock size={13} /> {item.nextTriggerTime}
                           </div>
                         </td>
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '10px 8px' }}>
                           <span
                             className={`badge ${isLowConfidence ? 'badge-review' : isHigh ? 'badge-success' : 'badge-review'}`}
+                            style={{ fontSize: 11, padding: '2px 7px' }}
                             title={isLowConfidence ? 'Below the 0.60 clinical gate — mandatory child review' : 'OCR confidence for this line'}
                           >
-                            <Sparkles size={12} /> {(item.confidence * 100).toFixed(0)}%
+                            <Sparkles size={11} /> {(item.confidence * 100).toFixed(0)}%
                           </span>
                         </td>
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '10px 8px' }}>
                           {showDiff && (diffs.length > 0 || !item.extracted) ? (
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); setExpandedDiffId(isDiffOpen ? null : item.id); }}
                               className={`badge ${diffs.length > 0 ? (isDosageCorrection(diffs) ? 'badge-review' : 'badge-success') : 'badge-review'}`}
-                              style={{ cursor: 'pointer', border: 'none' }}
+                              style={{ cursor: 'pointer', border: 'none', fontSize: 11, padding: '2px 7px' }}
                               title={item.extracted ? 'Compare OCR reading with your corrections' : 'Added manually — not machine extracted'}
                             >
-                              {item.extracted ? <GitCompareArrows size={12} /> : <PenLine size={12} />}
+                              {item.extracted ? <GitCompareArrows size={11} /> : <PenLine size={11} />}
                               {item.extracted ? (diffs.length > 0 ? `${diffs.length} edited` : 'No edits') : 'Manual'}
                             </button>
                           ) : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>}
                         </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                           <button
                             type="button"
                             onClick={(e) => handleRemoveItem(item.id, e)}
@@ -516,7 +521,7 @@ export const Tab2DocumentIntake: React.FC = () => {
                             onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
                             title="Remove item"
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={14} />
                           </button>
                         </td>
                       </tr>

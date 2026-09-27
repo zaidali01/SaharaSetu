@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppProvider, useApp } from './context/AppContext';
 import { Sidebar } from './components/layout/Sidebar';
+import { MobileNav } from './components/layout/MobileNav';
 import { GuardrailsModal } from './components/layout/GuardrailsModal';
 import { AlertsDrawer } from './components/layout/AlertsDrawer';
 import { ParentProfileModal } from './components/layout/ParentProfileModal';
@@ -21,8 +22,11 @@ const DashboardContent: React.FC = () => {
 
   return (
     <div className="dashboard-layout">
-      {/* Fixed sidebar */}
+      {/* Fixed desktop sidebar */}
       <Sidebar />
+
+      {/* Mobile Top & Bottom Navigation */}
+      <MobileNav />
 
       {/* Main content area */}
       <main className="main-content">

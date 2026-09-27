@@ -189,8 +189,8 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 100vh;
 }
 .content-inner {
-  max-width: 1200px; margin: 0 auto;
-  padding: 28px 32px 100px;
+  max-width: 1440px; margin: 0 auto;
+  padding: 24px 28px 100px;
 }
 
 /* ─── Page Header ─────────────────────────────────────────── */
@@ -426,3 +426,77 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ─── Utility ─────────────────────────────────────────────── */
 .mono { font-family: var(--font-mono); }
+
+/* ─── Responsive Grid Containers ──────────────────────────── */
+.doc-intake-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.agent-nodes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  position: relative;
+}
+
+/* ─── Mobile & Tablet Responsive Media Queries ────────────── */
+@media (max-width: 1024px) {
+  .doc-intake-layout {
+    grid-template-columns: 1fr;
+  }
+  .agent-nodes-grid {
+    grid-template-columns: 1fr;
+  }
+  .agent-node-connector {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    display: none !important;
+  }
+  .mobile-top-bar {
+    display: flex !important;
+  }
+  .mobile-bottom-bar {
+    display: flex !important;
+  }
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .content-inner {
+    padding: 12px 14px 90px !important;
+  }
+  .page-header-container {
+    margin: -12px -14px 16px !important;
+    padding: 12px 14px !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+  .page-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .stats-row {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+  .kanban-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  aside[aria-label="Demo Tools Dock"] {
+    bottom: 64px !important;
+    right: 12px !important;
+  }
+}
+

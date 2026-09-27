@@ -77,7 +77,7 @@ export const Tab3AgentTrace: React.FC = () => {
           </span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, position: 'relative' }}>
+        <div className="agent-nodes-grid">
           {agentNodes.map((node, index) => {
             const isSelected = selectedNodeId === node.id;
             return (
@@ -119,7 +119,7 @@ export const Tab3AgentTrace: React.FC = () => {
                 </motion.div>
 
                 {index < agentNodes.length - 1 && (
-                  <div style={{ display: 'flex', position: 'absolute', right: -24, top: '50%', transform: 'translateY(-50%)', zIndex: 10, width: 32, height: 32, borderRadius: '50%', background: '#fff', border: '1px solid var(--border-light)', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(36,51,43,0.08)', pointerEvents: 'none' }}>
+                  <div className="agent-node-connector" style={{ display: 'flex', position: 'absolute', right: -24, top: '50%', transform: 'translateY(-50%)', zIndex: 10, width: 32, height: 32, borderRadius: '50%', background: '#fff', border: '1px solid var(--border-light)', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(36,51,43,0.08)', pointerEvents: 'none' }}>
                     <ArrowRight size={14} color="var(--terracotta)" />
                   </div>
                 )}

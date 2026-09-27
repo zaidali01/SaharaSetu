@@ -350,42 +350,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      // 1. Try the real backend OCR pipeline first.
-      const remote = await apiService.extractDocument(
-        file instanceof File ? file : { fileName },
-        activeParent.name
-      );
-
-      if (remote.success && remote.extractedItems && remote.extractedItems.length > 0) {
-        newDoc = {
-          id: `doc-remote-${Date.now()}`,
-          parentId: activeParent.id,
-          fileName,
-          docType: (remote.documentType as DocumentRecord['docType']) || 'PRESCRIPTION',
-          patientOrConsumerName: remote.patientOrConsumerName || activeParent.name,
-          consultDate: remote.consultDate || new Date().toISOString(),
-          vitalsOrSummary: remote.vitalsOrSummary || '',
-          issuer: remote.issuer || {
-            title: 'Unknown Issuer',
-            subtitle: '',
-            address: '',
-            regOrConsumer: '',
-          },
-          extractedItems: remote.extractedItems,
-        } as DocumentRecord;
-        usedBackendOcr = true;
-      } else {
-        throw new Error(remote.error || 'Backend OCR returned no items');
-      }
-    } catch {
-      // 2. Fall back to the in-browser engine, then the offline normalizer.
-      try {
-        const scanResult = await processPrescriptionScan(file);
+      // 1. Process real uploaded file with high-speed in-browser OCR / Multimodal Vision
+      const scanResult = await processPrescriptionScan(file);
+      if (scanResult && scanResult.medicines && scanResult.medicines.length > 0) {
         newDoc = convertToDocumentRecord(scanResult, activeParent.id, fileName);
-      } catch (e) {
-        console.warn('Vision scan fallback:', e);
+      } else {
         newDoc = parseUploadedDocument(file, activeParent);
+        if (scanResult?.rawImagePreviewUrl) {
+          newDoc.previewImageUrl = scanResult.rawImagePreviewUrl;
+        }
       }
+    } catch (e) {
+      console.warn('Vision OCR fallback engaged:', e);
+      newDoc = parseUploadedDocument(file, activeParent);
     }
 
     setDocuments((prev) => [newDoc, ...prev.filter(d => d.id !== newDoc.id)]);
