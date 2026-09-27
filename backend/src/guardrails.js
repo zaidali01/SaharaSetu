@@ -10,18 +10,33 @@ const MAX_PAYMENT_AMOUNT = parseFloat(process.env.MAX_PAYMENT_AMOUNT || '500');
 /**
  * Guardrail: Block dosage-change responses from voice calls.
  * If a call transcript contains a dosage modification request, BLOCK it.
+ *
+ * The IVR runs in Hindi/Bhojpuri, so Twilio returns Devanagari transcripts.
+ * Romanized-only patterns never match real transcripts, so the Devanagari set
+ * below is what actually fires in production. Both are kept: the Romanized set
+ * still covers English callers and the legacy dev transcript fixtures.
  */
 function checkDosageChangeGuardrail(transcript = '') {
   const dosagePatterns = [
+    // English
     /dose.*change/i,
     /dosage.*change/i,
     /dose.*increase/i,
     /dosage.*increase/i,
     /dose.*decrease/i,
     /dosage.*decrease/i,
-    /tablet.*badha/i,       // Hindi: tablet increase
-    /dawa.*kam karo/i,      // Hindi: reduce medicine
-    /dawai.*band karo/i,    // Hindi: stop medicine
+    // Romanized Hindi
+    /tablet.*badha/i,       // tablet increase
+    /dawa.*kam karo/i,      // reduce medicine
+    /dawai.*band karo/i,    // stop medicine
+    // Devanagari: increase dose / tablet
+    /(दवा|दवाई|दवाइय|गोली|खुराक|मात्रा|डोज|डोज़)\s*(बढ़|बढा|बढ़ा|बढ़ाओ|बढ़ाना)/i,
+    // Devanagari: reduce dose / tablet
+    /(दवा|दवाई|दवाइय|गोली|खुराक|मात्रा|डोज|डोज़)\s*(कम|घटा|घटाओ)/i,
+    // Devanagari: stop medicine
+    /(दवा|दवाई|दवाइय|गोली)\s*(बंद|बन्द|छोड़|हटा)/i,
+    // Devanagari: half / double the dose
+    /(आधी|दुगुनी|दो गुनी|डबल)\s*(गोली|दवा|खुराक)?/i,
   ];
   return dosagePatterns.some((pattern) => pattern.test(transcript));
 }
@@ -40,18 +55,35 @@ function checkPaymentGuardrail(amount, isApproved) {
 /**
  * Main guardrail check — call this before executing any action.
  * Returns { allowed: boolean, reason: string }
+ *
+ * @param {object} opts
+ * @param {string} [opts.dosageRequest] — the Voice Agent's own classification
+ *   for the medicine answer ('dosage_request'). This is authoritative: regex
+ *   matching on a transcript is a backstop, not the primary signal, because the
+ *   agent already understands the intent in-context.
  */
-async function runGuardrails({ taskId, type, transcript, amount, isApproved }) {
-  // 1. Dosage change check
-  if (type === 'medicine_order' && transcript && checkDosageChangeGuardrail(transcript)) {
-    await logAction({
-      taskId,
-      actor: 'guardrail',
-      action: 'dosage_change_blocked',
-      result: 'blocked',
-      payload: { transcript: transcript.slice(0, 200) },
-    });
-    return { allowed: false, reason: 'Dosage change detected in call — action blocked for safety.' };
+async function runGuardrails({ taskId, type, transcript, amount, isApproved, dosageRequest }) {
+  // 1. Dosage change check. The explicit classification wins; the transcript
+  //    regex is the fallback for callers that don't send `responses`.
+  if (type === 'medicine_order') {
+    const classified = dosageRequest === 'dosage_request';
+    const matched = !classified && transcript && checkDosageChangeGuardrail(transcript);
+    if (classified || matched) {
+      await logAction({
+        taskId,
+        actor: 'guardrail',
+        action: 'dosage_change_blocked',
+        result: 'blocked',
+        payload: {
+          detected_by: classified ? 'voice_agent_classification' : 'transcript_regex',
+          transcript: transcript?.slice(0, 200),
+        },
+      });
+      return {
+        allowed: false,
+        reason: 'Dosage change requested on the call — order withheld and flagged for the child. A clinician must review; the agent never alters dosage.',
+      };
+    }
   }
 
   // 2. Payment check

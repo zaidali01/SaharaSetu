@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { transitionTask, getTaskWithLog } = require('./stateMachine');
-const { processCallOutcome } = require('./actionTaker');
+const { processCallOutcome, executeApprovedAction } = require('./actionTaker');
 const { logAction } = require('./logger');
 
 // ────────────────────────────────────────────────────────────────
@@ -90,16 +90,107 @@ router.post('/tasks', async (req, res) => {
   }
 });
 
-/** POST /api/tasks/:id/approve — child approves a task (Needs Approval → Done) */
+/** POST /api/tasks/:id/approve — child approves a task (Needs Approval → Done)
+ *
+ *  This is the only place an outbound message is sent. processCallOutcome can
+ *  never dispatch on its own; a single automated IVR call is not consent to
+ *  spend money or message a real vendor. If the send fails the task stays in
+ *  awaiting_approval so the child can retry without losing the order.
+ */
 router.post('/tasks/:id/approve', async (req, res) => {
   try {
+    const { rows } = await pool.query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Task not found' });
+    const task = rows[0];
+
+    let dispatch = null;
+    if (task.task_type === 'medicine_order') {
+      try {
+        dispatch = await executeApprovedAction(task, { approvedBy: req.body.approved_by || 'dashboard' });
+      } catch (err) {
+        console.error(`[ROUTES] Dispatch failed for task ${task.id}:`, err.message);
+        return res.status(502).json({
+          error: 'Approved, but the vendor message could not be sent. Task left awaiting approval — retry safely.',
+          detail: err.message,
+        });
+      }
+      if (dispatch.dispatched === false && dispatch.reason) {
+        return res.status(422).json({ error: dispatch.reason });
+      }
+    }
+
     const result = await transitionTask(req.params.id, 'done', {
       actor: 'parent',  // in this context "parent" = child user (naming from PRD)
       reason: 'Manually approved via dashboard',
-      payload: { approved_by: req.body.approved_by || 'dashboard' },
+      payload: { approved_by: (req.body || {}).approved_by || 'dashboard', ...(dispatch || {}) },
     });
     if (!result.success) return res.status(400).json({ error: result.error });
-    res.json(result.task);
+    res.json({ ...result.task, dispatch });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/tasks/:id/call — place the call for a single task.
+ *
+ *  Track A cannot drive the state machine itself: transitioning straight to
+ *  awaiting_approval would be an invalid pending → awaiting_approval edge. This
+ *  does exactly what runPlanner() does for one task — pending → awaiting_call,
+ *  then trigger the Voice Agent — so the demo path stays inside the backend.
+ */
+router.post('/tasks/:id/call', async (req, res) => {
+  const voiceAgentUrl = process.env.VOICE_AGENT_URL || 'http://localhost:3000';
+  // A POST with no body and no content-type leaves req.body undefined.
+  const body = req.body || {};
+  const actor = body.actor || 'planner';
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.*, u.phone AS parent_phone, u.name AS parent_name
+       FROM tasks t LEFT JOIN users u ON t.parent_id = u.id
+       WHERE t.id = $1`, [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Task not found' });
+    const task = rows[0];
+
+    if (!task.parent_phone) {
+      return res.status(422).json({ error: 'No parent phone on file; cannot place a call.' });
+    }
+
+    const transition = await transitionTask(task.id, 'awaiting_call', {
+      actor,
+      reason: 'Call manually triggered for this task.',
+    });
+    if (!transition.success) return res.status(400).json({ error: transition.error });
+
+    try {
+      const response = await fetch(`${voiceAgentUrl}/api/trigger-call`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id, phone: task.parent_phone }),
+      });
+      if (!response.ok) {
+        throw new Error(`Voice Agent returned HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
+      }
+      const data = await response.json();
+      await logAction({
+        taskId: task.id, actor,
+        action: 'call_trigger_sent', result: 'success',
+        payload: { parent_phone: task.parent_phone, callSid: data.callSid, voiceAgentUrl },
+      });
+      res.json({ success: true, status: 'awaiting_call', callSid: data.callSid });
+    } catch (err) {
+      await logAction({
+        taskId: task.id, actor,
+        action: 'call_trigger_failed', result: 'failed',
+        payload: {
+          reason: err.message, voiceAgentUrl,
+          hint: 'Task is stuck in awaiting_call; the planner only selects status=pending.',
+        },
+      });
+      res.status(502).json({
+        error: `Voice Agent unreachable at ${voiceAgentUrl}: ${err.message}`,
+        status: 'awaiting_call',
+      });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
