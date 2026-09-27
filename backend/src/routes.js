@@ -460,4 +460,80 @@ router.get('/health', async (req, res) => {
   }
 });
 
+// ────────────────────────────────────────────────────────────────
+// TWILIO WHATSAPP WEBHOOKS
+//
+// A 2xx from the send API only means "queued". Handset delivery arrives
+// later on the status callback, so this is what turns an optimistic log
+// line into a verified one. Configure in the Twilio console as
+//   Messaging -> Senders -> your WhatsApp sender -> Status callback URL
+// It must be a public HTTPS URL (ngrok http 4000), not localhost.
+//
+// Twilio posts application/x-www-form-urlencoded, which express.urlencoded
+// parses into req.body.
+// ────────────────────────────────────────────────────────────────
+
+const { fetchMessageStatus } = require('./whatsapp');
+
+router.post('/whatsapp/status', async (req, res) => {
+  // Twilio retries on non-2xx, and it is not idempotent in our DB terms, so
+  // answer fast and do the work after responding.
+  res.status(204).end();
+
+  try {
+    const { MessageSid, MessageStatus, ErrorCode, ErrorMessage, To } = req.body || {};
+    if (!MessageSid) return;
+
+    const terminal = ['delivered', 'read', 'failed', 'undelivered'];
+    const result = terminal.includes(MessageStatus) ? MessageStatus : 'accepted';
+
+    const { rows } = await pool.query(
+      `UPDATE action_log
+          SET result = $2::text,
+              payload = payload || jsonb_build_object(
+                'deliveryStatus', $2::text,
+                'deliveryErrorCode', $3::text,
+                'deliveryErrorMessage', $4::text,
+                'deliveredAt', NOW()
+              )
+        WHERE payload->>'messageId' = $1
+        RETURNING task_id`,
+      [MessageSid, result, ErrorCode || null, ErrorMessage || null]
+    );
+
+    console.log(
+      `[WhatsApp Status] ${MessageSid} -> ${MessageStatus}` +
+        (ErrorCode ? ` (error ${ErrorCode}: ${ErrorMessage})` : '') +
+        ` [${rows.length} log row(s) updated]`
+    );
+  } catch (err) {
+    console.error('[WhatsApp Status Error]', err.message);
+  }
+});
+
+// Inbound messages are not needed for the core flow (voice call -> child
+// approves -> we send), but the endpoint exists so an opt-out or a chemist
+// reply is captured rather than silently dropped.
+router.post('/whatsapp/inbound', async (req, res) => {
+  res.status(204).end();
+  try {
+    const { From, Body, ProfileName, WaId } = req.body || {};
+    console.log(
+      `[WhatsApp Inbound] from=${From || WaId || 'unknown'} ` +
+        `profile=${ProfileName || 'unknown'} body="${(Body || '').slice(0, 160)}"`
+    );
+  } catch (err) {
+    console.error('[WhatsApp Inbound Error]', err.message);
+  }
+});
+
+// Manual delivery check, for when no public callback URL is configured yet.
+router.get('/whatsapp/status/:sid', async (req, res) => {
+  try {
+    res.json(await fetchMessageStatus(req.params.sid));
+  } catch (err) {
+    res.status(502).json({ error: err.message, code: err.code });
+  }
+});
+
 module.exports = router;

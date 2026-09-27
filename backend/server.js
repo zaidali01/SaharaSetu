@@ -17,6 +17,10 @@ const PORT = process.env.PORT || 4000;
 // ─── Middleware
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+// Twilio's status/inbound webhooks are application/x-www-form-urlencoded, not
+// JSON, so without this express leaves req.body undefined and every
+// MessageSid reads as missing.
+app.use(express.urlencoded({ extended: false }));
 
 // ─── API Routes
 app.use('/api', routes);
