@@ -27,8 +27,14 @@ function getClient() {
 
 async function placeCall(attempt = 1, phone = null, taskId = null) {
   requireEnv('TWILIO_FROM_NUMBER', TWILIO_FROM_NUMBER);
-  const targetPhone = phone || process.env.PARENT_TEST_NUMBER;
-  if (!targetPhone) requireEnv('PARENT_TEST_NUMBER', process.env.PARENT_TEST_NUMBER);
+  // TEST ONLY: Twilio trial can only dial verified numbers. If FORCE_DIAL_NUMBER
+  // is set, every call goes there regardless of the phone the backend sent.
+  // Blank it once the account is upgraded / real parent numbers are in the DB.
+  const forced = process.env.FORCE_DIAL_NUMBER;
+  if (forced && phone && phone !== forced) {
+    console.warn(`[FORCE_DIAL] Backend asked for ${phone}, dialing ${forced} instead (trial override).`);
+  }
+  const targetPhone = forced || phone || process.env.PARENT_TEST_NUMBER;  if (!targetPhone) requireEnv('PARENT_TEST_NUMBER', process.env.PARENT_TEST_NUMBER);
   requireEnv('PUBLIC_BASE_URL', PUBLIC_BASE_URL);
 
   const client = getClient();
