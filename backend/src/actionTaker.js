@@ -321,9 +321,7 @@ async function executeApprovedAction(task, { actor = 'parent', approvedBy = 'das
 
   const result = await sendWhatsAppMessage(
     chemistPhone,
-    process.env.WHATSAPP_TEMPLATE_NAME || 'order_confirmation',
-    [order.medicineName, order.quantity, order.deliveryAddress],
-    { language: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US' }
+    [order.medicineName, order.quantity, order.deliveryAddress]
   );
 
   await logAction({

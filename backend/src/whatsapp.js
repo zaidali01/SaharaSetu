@@ -9,11 +9,10 @@ require('dotenv').config();
  * free and needs no business verification, which is the right trade for a
  * hackathon.
  *
- * The signature is unchanged from the Meta implementation so actionTaker's
- * single call site keeps working. `templateName` is now advisory metadata
- * only: Twilio sandbox sends free-form text and requires no template
- * approval, so the params are rendered into a readable body instead of
- * being posted as template components.
+ * Twilio sandbox sends free-form text and requires no approved template, so
+ * the old Meta `templateName`/language parameters were removed outright rather
+ * than left as fallbacks that no longer do anything. Callers pass the order
+ * fields as positional params, or an explicit `body`.
  *
  * DELIVERY IS NOT PROVEN BY A 2xx. Twilio accepts a message and reports
  * `status: queued`; handset delivery arrives later on the status callback.
@@ -66,24 +65,44 @@ function buildOrderBody(params) {
 }
 
 /**
+ * Resolve the outbound WhatsApp sender.
+ *
+ * The voice agent calls this TWILIO_FROM_NUMBER (a bare +E164 string, because
+ * Twilio Voice rejects the `whatsapp:` scheme) while this module historically
+ * used TWILIO_WHATSAPP_FROM. Read both so the two processes cannot end up on
+ * different accounts/senders, then add the scheme the Messages API needs.
+ *
+ * There is deliberately no hardcoded fallback number: silently defaulting to
+ * another account's sandbox is how you get a 2xx and no delivery.
+ */
+function resolveSender() {
+  const raw = process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_WHATSAPP_FROM;
+  if (!raw) {
+    throw new Error(
+      'Missing TWILIO_FROM_NUMBER (or TWILIO_WHATSAPP_FROM). Set it to a WhatsApp-enabled ' +
+      'number on the same Twilio account as TWILIO_ACCOUNT_SID.'
+    );
+  }
+  const s = String(raw).trim();
+  return /^whatsapp:/i.test(s) ? s : `whatsapp:${s}`;
+}
+
+/**
  * Send a WhatsApp message.
  *
  * @param {string} to           Recipient phone in any common format.
- * @param {string} [templateName] Legacy Meta template name; kept as metadata.
  * @param {string[]} [params]   Positional order fields: name, quantity, address.
  * @param {object} [opts]
  * @param {string} [opts.body]  Explicit body, overriding the rendered default.
  * @returns {Promise<object>} `{ id, status, recipient, ... }` — `.id` and
  *   `.status` are the fields actionTaker logs.
  */
-async function sendWhatsAppMessage(to, templateName, params = [], opts = {}) {
+async function sendWhatsAppMessage(to, params = [], opts = {}) {
   const dryRun = process.env.WHATSAPP_DRY_RUN === 'true';
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
 
   const body = opts.body || buildOrderBody(params);
-  const legacyTemplate = templateName || process.env.WHATSAPP_TEMPLATE_NAME || 'order_confirmation';
 
   let recipient;
   try {
@@ -96,6 +115,8 @@ async function sendWhatsAppMessage(to, templateName, params = [], opts = {}) {
   const missing = !accountSid || !authToken;
   if (dryRun || missing) {
     const reason = dryRun ? 'WHATSAPP_DRY_RUN=true' : 'missing TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN';
+    let from = '(unresolved)';
+    try { from = resolveSender(); } catch { /* dry-run should not hard-fail on sender */ }
     console.log(
       `[WhatsApp ${dryRun ? 'DRY RUN' : 'Mock'}] (${reason}) would send from ${from} to ${recipient}:`,
       body.replace(/\n/g, ' | ')
@@ -107,16 +128,33 @@ async function sendWhatsAppMessage(to, templateName, params = [], opts = {}) {
       recipient,
       from,
       body,
-      legacyTemplate,
     };
   }
 
+  const from = resolveSender();
+
+  // Teammate 1's Twilio account has its default StatusCallbackUrl set to the
+  // literal string "none", and Twilio then rejects EVERY send with 21609
+  // ("The StatusCallback URL none is not a valid URL"). Supplying a valid
+  // callback per message sidesteps the broken account-level default.
+  const callbackBase = process.env.TWILIO_STATUS_CALLBACK_URL
+    || process.env.PUBLIC_BASE_URL;
+  const statusCallback = callbackBase
+    ? (/^https?:\/\//.test(callbackBase)
+        ? callbackBase
+        : `${String(callbackBase).replace(/\/$/, '')}/api/whatsapp/status`)
+    : undefined;
   // Required lazily so the dry-run branch above works without the SDK.
   const twilio = require('twilio');
   const client = twilio(accountSid, authToken);
 
   try {
-    const message = await client.messages.create({ from, to: recipient, body });
+    const message = await client.messages.create({
+      from,
+      to: recipient,
+      body,
+      ...(statusCallback ? { statusCallback } : {}),
+    });
 
     console.log(
       `[WhatsApp] sid=${message.sid} status=${message.status} to=${recipient} ` +
@@ -132,7 +170,6 @@ async function sendWhatsAppMessage(to, templateName, params = [], opts = {}) {
       recipient,
       from,
       body,
-      legacyTemplate,
       price: message.price,
       errorCode: message.errorCode,
       raw: message,
@@ -178,4 +215,4 @@ async function fetchMessageStatus(messageSid) {
   };
 }
 
-module.exports = { sendWhatsAppMessage, fetchMessageStatus, toWhatsAppAddress, buildOrderBody };
+module.exports = { sendWhatsAppMessage, fetchMessageStatus, toWhatsAppAddress, buildOrderBody, resolveSender };
